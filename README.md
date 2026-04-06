@@ -1,5 +1,9 @@
 # PaddleOCR PDF to Markdown Skill
 
+[![version](https://img.shields.io/badge/version-2.0.8-blue)](./_meta.json)
+[![python](https://img.shields.io/badge/python-3.9%2B-3776AB)](./scripts/requirements.txt)
+[![license](https://img.shields.io/badge/license-Apache%202.0-green)](./LICENSE)
+
 Convert PDFs and document images into Markdown and structured JSON with PaddleOCR Document Parsing.
 
 This repository packages a Codex/OpenClaw skill plus the supporting Python scripts used to call the PaddleOCR Document Parsing API in a stable, production-friendly way.

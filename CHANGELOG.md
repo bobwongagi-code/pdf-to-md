@@ -8,6 +8,7 @@ This project follows a simple keep-a-changelog style format.
 
 - added `LICENSE` with Apache-2.0
 - updated `README.md` to point to the repository license
+- added repository badges for version, Python support, and license
 
 ## [2.0.8] - 2026-04-06
 
