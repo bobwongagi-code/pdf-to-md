@@ -1,0 +1,28 @@
+changelog:
+  categories:
+    - title: Highlights
+      labels:
+        - enhancement
+        - feature
+    - title: Stability and Performance
+      labels:
+        - bug
+        - performance
+        - reliability
+    - title: Documentation
+      labels:
+        - documentation
+        - docs
+    - title: CI and Tooling
+      labels:
+        - ci
+        - tooling
+        - maintenance
+    - title: Other Changes
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - skip-release-notes
+    authors:
+      - dependabot

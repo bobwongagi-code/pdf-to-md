@@ -11,6 +11,8 @@ This project follows a simple keep-a-changelog style format.
 - added repository badges for version, Python support, and license
 - added GitHub issue templates and pull request template
 - added a lightweight GitHub Actions workflow for version and smoke-test checks
+- added a CI badge to `README.md`
+- added `.github/release.yml` for structured auto-generated release notes
 
 ## [2.0.8] - 2026-04-06
 
