@@ -4,6 +4,39 @@ Convert PDFs and document images into Markdown and structured JSON with PaddleOC
 
 This repository packages a Codex/OpenClaw skill plus the supporting Python scripts used to call the PaddleOCR Document Parsing API in a stable, production-friendly way.
 
+## Quick Start
+
+1. Install dependencies:
+
+```bash
+pip install -r scripts/requirements.txt
+```
+
+2. Configure your endpoint:
+
+```bash
+export PADDLEOCR_DOC_PARSING_API_URL="https://your-endpoint/layout-parsing"
+export PADDLEOCR_ACCESS_TOKEN="your-token"
+export PADDLEOCR_DOC_PARSING_TIMEOUT="120"
+```
+
+3. Run a quick health check:
+
+```bash
+python scripts/smoke_test.py --skip-api-test
+```
+
+4. Convert a local PDF:
+
+```bash
+python scripts/vl_caller.py \
+  --file-path "/absolute/path/to/document.pdf" \
+  --file-type 0 \
+  --pretty
+```
+
+5. Read the saved JSON path from stderr and use the top-level `text` field as the Markdown output.
+
 ## What It Does
 
 - Converts local PDFs and document images to Markdown
@@ -51,6 +84,11 @@ Optional utilities for image optimization and PDF page extraction:
 pip install -r scripts/requirements-optimize.txt
 ```
 
+Recommended for most users:
+
+- `scripts/requirements.txt` is enough for normal parsing
+- `scripts/requirements-optimize.txt` is only needed if you want image optimization or local PDF page extraction helpers
+
 ## Configuration
 
 Set these environment variables:
@@ -71,6 +109,33 @@ Run a real API smoke test:
 
 ```bash
 python scripts/smoke_test.py
+```
+
+## Command Cheat Sheet
+
+Most common commands:
+
+```bash
+# Local PDF -> saved JSON result
+python scripts/vl_caller.py --file-path "/path/file.pdf" --file-type 0 --pretty
+
+# Local image -> saved JSON result
+python scripts/vl_caller.py --file-path "/path/file.png" --file-type 1 --pretty
+
+# Remote PDF URL -> saved JSON result
+python scripts/vl_caller.py --file-url "https://example.com/file.pdf" --file-type 0 --pretty
+
+# Print JSON to stdout
+python scripts/vl_caller.py --file-path "/path/file.pdf" --file-type 0 --stdout --pretty
+
+# Skip cache
+python scripts/vl_caller.py --file-path "/path/file.pdf" --file-type 0 --pretty --no-cache
+
+# Enable timing output
+python scripts/vl_caller.py --file-path "/path/file.pdf" --file-type 0 --pretty --timing
+
+# Scanned/rotated documents
+python scripts/vl_caller.py --file-path "/path/file.pdf" --file-type 0 --doc-unwarping --orientation-classify --pretty
 ```
 
 ## Basic Usage
@@ -151,6 +216,14 @@ In most cases:
 
 - Use `text` for the Markdown output you want
 - Use `result` when you need raw provider details for debugging or deeper extraction
+
+If you want a standalone `.md` file beside the original PDF, a simple workflow is:
+
+1. Run `vl_caller.py`
+2. Open the saved JSON file
+3. Copy the top-level `text` field into a same-name `.md` file
+
+This repo keeps the parsing layer and the final Markdown file creation loosely coupled on purpose. It makes debugging much easier because the raw provider result is always preserved.
 
 ## Stability and Performance Defaults
 
@@ -236,6 +309,9 @@ This repository is designed to be used as a skill inside Codex/OpenClaw environm
 
 - Skill definition: [`SKILL.md`](./SKILL.md)
 - Output schema notes: [`references/output_schema.md`](./references/output_schema.md)
+- Example workflow: [`examples/quickstart.md`](./examples/quickstart.md)
+- Contribution guide: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- Change history: [`CHANGELOG.md`](./CHANGELOG.md)
 
 ## License
 
