@@ -57,6 +57,7 @@ For most changes, run:
 
 ```bash
 python scripts/vl_caller.py --version
+python -m unittest discover -s tests -v
 python scripts/smoke_test.py --skip-api-test
 ```
 
@@ -104,4 +105,3 @@ Small, well-scoped pull requests are preferred.
 - `scripts/vl_caller.py` is the main entry point
 
 When in doubt, keep the default path boring and reliable.
-
