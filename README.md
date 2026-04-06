@@ -316,6 +316,8 @@ This repository is designed to be used as a skill inside Codex/OpenClaw environm
 - Output schema notes: [`references/output_schema.md`](./references/output_schema.md)
 - Example workflow: [`examples/quickstart.md`](./examples/quickstart.md)
 - Contribution guide: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- Security guidance: [`SECURITY.md`](./SECURITY.md)
+- Regression checklist: [`docs/regression-cases.md`](./docs/regression-cases.md)
 - Change history: [`CHANGELOG.md`](./CHANGELOG.md)
 
 ## License

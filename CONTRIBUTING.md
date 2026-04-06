@@ -78,6 +78,8 @@ At minimum, keep these in sync:
 - `README.md`
 - `SKILL.md`
 - `CHANGELOG.md`
+- `SECURITY.md` when credential handling guidance changes
+- `docs/regression-cases.md` when a new real-world benchmark case matters
 
 Examples:
 
@@ -101,6 +103,8 @@ Small, well-scoped pull requests are preferred.
 
 - `README.md` is for GitHub and direct repository users
 - `SKILL.md` is for skill-driven agent environments
+- `SECURITY.md` documents secret-handling and disclosure expectations
+- `docs/regression-cases.md` tracks real-world regression benchmarks
 - `references/output_schema.md` documents output structure
 - `scripts/vl_caller.py` is the main entry point
 

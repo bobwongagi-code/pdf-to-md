@@ -15,6 +15,8 @@ This project follows a simple keep-a-changelog style format.
 - added `.github/release.yml` for structured auto-generated release notes
 - added focused unit tests for cache keys, cache TTL, chunk merging, and large-PDF split flow
 - expanded CI to run on Python `3.9` and `3.11`
+- added `SECURITY.md` with credential handling and leak-response guidance
+- added `docs/regression-cases.md` to track real-world regression benchmarks
 
 ## [2.0.8] - 2026-04-06
 

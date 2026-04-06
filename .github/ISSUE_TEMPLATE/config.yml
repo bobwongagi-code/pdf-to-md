@@ -6,4 +6,6 @@ contact_links:
   - name: Contribution guide
     url: https://github.com/bobwongagi-code/pdf-to-md/blob/main/CONTRIBUTING.md
     about: Read contribution and validation expectations before proposing changes
-
+  - name: Security guidance
+    url: https://github.com/bobwongagi-code/pdf-to-md/blob/main/SECURITY.md
+    about: Read this first if your report involves tokens, private endpoints, or sensitive documents
