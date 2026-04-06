@@ -6,7 +6,8 @@ This project follows a simple keep-a-changelog style format.
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+- added `LICENSE` with Apache-2.0
+- updated `README.md` to point to the repository license
 
 ## [2.0.8] - 2026-04-06
 
@@ -49,4 +50,3 @@ This project follows a simple keep-a-changelog style format.
 ### Added
 
 - initial stable public packaging of the skill repository
-

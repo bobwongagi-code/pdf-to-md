@@ -315,4 +315,4 @@ This repository is designed to be used as a skill inside Codex/OpenClaw environm
 
 ## License
 
-Add your preferred license before broader distribution.
+Licensed under the Apache License 2.0. See [`LICENSE`](./LICENSE).
