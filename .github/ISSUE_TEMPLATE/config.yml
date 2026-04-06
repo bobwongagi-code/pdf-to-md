@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage and setup guide
+    url: https://github.com/bobwongagi-code/pdf-to-md/blob/main/README.md
+    about: Check README for installation, configuration, and common commands
+  - name: Contribution guide
+    url: https://github.com/bobwongagi-code/pdf-to-md/blob/main/CONTRIBUTING.md
+    about: Read contribution and validation expectations before proposing changes
+
