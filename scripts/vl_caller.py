@@ -55,7 +55,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from lib import FILE_TYPE_IMAGE, FILE_TYPE_PDF, parse_document
 from split_pdf import get_pdf_page_count, split_pdf
 
-__version__ = "2.0.8"
+__version__ = "2.0.9"
 DEFAULT_MAX_PAGES_PER_REQUEST = 100
 DEFAULT_MAX_CHUNK_WORKERS = 2
 DEFAULT_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60

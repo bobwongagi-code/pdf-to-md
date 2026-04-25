@@ -6,17 +6,21 @@ This project follows a simple keep-a-changelog style format.
 
 ## [Unreleased]
 
-- added `LICENSE` with Apache-2.0
-- updated `README.md` to point to the repository license
-- added repository badges for version, Python support, and license
-- added GitHub issue templates and pull request template
-- added a lightweight GitHub Actions workflow for version and smoke-test checks
-- added a CI badge to `README.md`
-- added `.github/release.yml` for structured auto-generated release notes
-- added focused unit tests for cache keys, cache TTL, chunk merging, and large-PDF split flow
-- expanded CI to run on Python `3.9` and `3.11`
-- added `SECURITY.md` with credential handling and leak-response guidance
-- added `docs/regression-cases.md` to track real-world regression benchmarks
+## [2.0.9] - 2026-04-25
+
+### Added
+
+- `scripts/pdf_to_md.py` as a thin local-file wrapper for the common PDF-to-Markdown flow
+- `agents/openai.yaml` with display metadata, default prompt, icons, and brand color
+- lightweight SVG icons under `assets/` for UI presentation
+
+### Changed
+
+- renamed the skill metadata and package slug consistently to `pdf-to-md`
+- added first-class Markdown file output support to `scripts/vl_caller.py`
+- simplified `README.md` and `SKILL.md` around the default local-file workflow
+- updated quickstart, schema notes, and smoke-test examples to match the new entrypoints
+- removed stale `openclaw` and old `paddleocr-doc-parsing` naming leftovers from docs and examples
 
 ## [2.0.8] - 2026-04-06
 

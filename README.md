@@ -1,7 +1,7 @@
 # PDF to Markdown
 
 [![ci](https://github.com/bobwongagi-code/pdf-to-md/actions/workflows/ci.yml/badge.svg)](https://github.com/bobwongagi-code/pdf-to-md/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-2.0.8-blue)](./_meta.json)
+[![version](https://img.shields.io/badge/version-2.0.9-blue)](./_meta.json)
 [![python](https://img.shields.io/badge/python-3.9%2B-3776AB)](./scripts/requirements.txt)
 [![license](https://img.shields.io/badge/license-Apache%202.0-green)](./LICENSE)
 
