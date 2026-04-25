@@ -22,26 +22,24 @@ export PADDLEOCR_DOC_PARSING_TIMEOUT="120"
 python scripts/smoke_test.py --skip-api-test
 ```
 
-## 4. Parse a PDF
+## 4. Parse a PDF and write Markdown
 
 ```bash
-python scripts/vl_caller.py \
-  --file-path "/absolute/path/to/document.pdf" \
-  --file-type 0 \
-  --pretty
+python scripts/pdf_to_md.py "/absolute/path/to/document.pdf" --pretty
 ```
 
 Typical stderr output:
 
 ```text
 Result saved to: /tmp/paddleocr/doc-parsing/results/result_20260406_120000_abc123.json
+Markdown saved to: /absolute/path/to/document.md
 ```
 
 ## 5. Read the Markdown Text
 
-Open the saved JSON and read the top-level `text` field.
+Open `/absolute/path/to/document.md` directly.
 
-Minimal example:
+If you also want to inspect the raw JSON envelope, read the saved JSON path from stderr and inspect the top-level `text` field.
 
 ```python
 import json
@@ -51,19 +49,6 @@ result_path = Path("/tmp/paddleocr/doc-parsing/results/result_20260406_120000_ab
 data = json.loads(result_path.read_text(encoding="utf-8"))
 markdown_text = data["text"]
 print(markdown_text[:1000])
-```
-
-## 6. Optional: Save as `.md`
-
-```python
-import json
-from pathlib import Path
-
-pdf_path = Path("/absolute/path/to/document.pdf")
-json_path = Path("/tmp/paddleocr/doc-parsing/results/result_20260406_120000_abc123.json")
-
-data = json.loads(json_path.read_text(encoding="utf-8"))
-pdf_path.with_suffix(".md").write_text(data["text"] + "\n", encoding="utf-8")
 ```
 
 ## Tips

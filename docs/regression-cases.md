@@ -26,7 +26,7 @@ When making changes to parsing behavior, caching, large-file handling, or retry 
 | `large-pdf-repeat-cache` | local PDF | rerun same large PDF | repeat run reuses full cache or chunk cache where applicable | baseline defined |
 | `scan-orientation` | local PDF/image | scanned or rotated input | optional preprocessing flags produce isolated cache keys and stable output | baseline defined |
 
-## Detailed Case: `openclaw-large-pdf-recovery`
+## Detailed Case: `large-pdf-recovery-sample`
 
 - Input file: `OpenClaw橙皮书-从入门到精通-v1.4.0.pdf`
 - Location used during investigation:
@@ -69,7 +69,7 @@ Future changes should preserve at least this recovery quality:
 
 See the external case write-up:
 
-- `/Users/wangbo5/Documents/New project/docs/paddleocr-case-openclaw-large-pdf-2026-04-05.md`
+- `/Users/wangbo5/Documents/New project/docs/paddleocr-case-large-pdf-2026-04-05.md`
 
 ## Notes to Maintainers
 

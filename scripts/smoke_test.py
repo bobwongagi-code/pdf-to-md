@@ -14,13 +14,13 @@
 # limitations under the License.
 
 """
-Smoke Test for PaddleOCR Document Parsing Skill
+Smoke test for the pdf-to-md skill.
 
 Verifies configuration and API connectivity.
 
 Usage:
-    python paddleocr-doc-parsing/scripts/smoke_test.py
-    python paddleocr-doc-parsing/scripts/smoke_test.py --skip-api-test
+    python scripts/smoke_test.py
+    python scripts/smoke_test.py --skip-api-test
 """
 
 import argparse
@@ -167,8 +167,8 @@ def main():
     print("Smoke Test PASSED")
     print("=" * 60)
     print("\nNext steps:")
-    print('  python paddleocr-doc-parsing/scripts/vl_caller.py --file-url "URL"')
-    print('  python paddleocr-doc-parsing/scripts/vl_caller.py --file-path "doc.pdf"')
+    print('  python scripts/vl_caller.py --file-url "URL"')
+    print('  python scripts/vl_caller.py --file-path "doc.pdf"')
     print(
         "  Results are auto-saved to the system temp directory; the caller prints the saved path."
     )

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PDF to Markdown icon">
+  <rect width="64" height="64" rx="14" fill="#0F172A"/>
+  <path d="M18 14h20l8 8v28c0 2.21-1.79 4-4 4H18c-2.21 0-4-1.79-4-4V18c0-2.21 1.79-4 4-4Z" fill="#F8FAFC"/>
+  <path d="M38 14v8h8" fill="#BFDBFE"/>
+  <path d="M38 14v8h8" stroke="#2563EB" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+  <path d="M22 30h20M22 36h12M22 42h20" stroke="#2563EB" stroke-linecap="round" stroke-width="3"/>
+  <path d="M42 45 48 39" stroke="#DC2626" stroke-linecap="round" stroke-width="3"/>
+  <path d="M42 39h6v6" fill="none" stroke="#DC2626" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/>
+</svg>

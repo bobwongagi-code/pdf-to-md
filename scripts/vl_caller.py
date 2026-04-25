@@ -19,9 +19,9 @@ PaddleOCR Document Parser
 Simple CLI wrapper for the PaddleOCR document parsing library.
 
 Usage:
-    python scripts/paddleocr-doc-parsing/vl_caller.py --file-url "URL"
-    python scripts/paddleocr-doc-parsing/vl_caller.py --file-path "document.pdf"
-    python scripts/paddleocr-doc-parsing/vl_caller.py --file-path "doc.pdf" --pretty
+    python scripts/vl_caller.py --file-url "URL"
+    python scripts/vl_caller.py --file-path "document.pdf"
+    python scripts/vl_caller.py --file-path "doc.pdf" --pretty
 """
 
 import argparse
@@ -114,6 +114,17 @@ def resolve_output_path(output_arg):
     return get_default_output_path().resolve()
 
 
+def resolve_markdown_output_path(
+    markdown_output_arg: Optional[str],
+    input_file_path: Optional[str],
+) -> Optional[Path]:
+    if markdown_output_arg:
+        return Path(markdown_output_arg).expanduser().resolve()
+    if input_file_path:
+        return Path(input_file_path).expanduser().resolve().with_suffix(".md")
+    return None
+
+
 def get_default_cache_dir():
     return (
         Path(tempfile.gettempdir()) / "paddleocr" / "doc-parsing" / "cache"
@@ -135,6 +146,30 @@ def resolve_effective_file_type(file_path: str, file_type: Optional[int]) -> Opt
     if lower_path.endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")):
         return FILE_TYPE_IMAGE
     return None
+
+
+def extract_markdown_text(result: dict) -> str:
+    text = result.get("text")
+    if isinstance(text, str):
+        return text
+    return ""
+
+
+def write_json_file(output_path: Path, result: dict, indent: Optional[int]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
+    with temp_path.open("w", encoding="utf-8") as f:
+        json.dump(result, f, indent=indent, ensure_ascii=False)
+    os.replace(temp_path, output_path)
+
+
+def write_markdown_file(output_path: Path, markdown_text: str) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
+    content = markdown_text if markdown_text.endswith("\n") else f"{markdown_text}\n"
+    with temp_path.open("w", encoding="utf-8") as f:
+        f.write(content)
+    os.replace(temp_path, output_path)
 
 
 def get_cache_ttl_seconds() -> int:
@@ -477,16 +512,16 @@ def main():
         epilog="""
 Examples:
   # Parse document from URL (result is auto-saved to the system temp directory)
-  python scripts/paddleocr-doc-parsing/vl_caller.py --file-url "https://example.com/document.pdf"
+  python scripts/vl_caller.py --file-url "https://example.com/document.pdf"
 
   # Parse local file (result is auto-saved to the system temp directory)
-  python scripts/paddleocr-doc-parsing/vl_caller.py --file-path "./invoice.pdf"
+  python scripts/vl_caller.py --file-path "./invoice.pdf"
 
   # Save result to a custom file path
-  python scripts/paddleocr-doc-parsing/vl_caller.py --file-url "URL" --output "./result.json" --pretty
+  python scripts/vl_caller.py --file-url "URL" --output "./result.json" --pretty
 
   # Print JSON to stdout without saving a file
-  python scripts/paddleocr-doc-parsing/vl_caller.py --file-url "URL" --stdout --pretty
+  python scripts/vl_caller.py --file-url "URL" --stdout --pretty
 Configuration:
   Set environment variables: PADDLEOCR_DOC_PARSING_API_URL, PADDLEOCR_ACCESS_TOKEN
   Optional: PADDLEOCR_DOC_PARSING_TIMEOUT
@@ -543,6 +578,16 @@ Configuration:
         "--stdout",
         action="store_true",
         help="Print JSON to stdout instead of saving to a file",
+    )
+    parser.add_argument(
+        "--markdown-output",
+        metavar="FILE",
+        help="Also write extracted Markdown text to this file",
+    )
+    parser.add_argument(
+        "--write-markdown",
+        action="store_true",
+        help="Also write extracted Markdown beside a local input file using the same base name",
     )
     parser.add_argument(
         "--no-cache",
@@ -632,6 +677,16 @@ Configuration:
 
     # Format output
     indent = 2 if args.pretty else None
+    markdown_path = None
+    if args.markdown_output or args.write_markdown:
+        if args.write_markdown and not args.file_path:
+            print("Error: --write-markdown requires --file-path", file=sys.stderr)
+            sys.exit(2)
+        markdown_path = resolve_markdown_output_path(
+            args.markdown_output,
+            args.file_path if args.write_markdown else None,
+        )
+
     if args.stdout:
         print(json.dumps(result, indent=indent, ensure_ascii=False))
     else:
@@ -640,17 +695,29 @@ Configuration:
         # Save to file
         output_write_started_at = time.perf_counter()
         try:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
-            with temp_path.open("w", encoding="utf-8") as f:
-                json.dump(result, f, indent=indent, ensure_ascii=False)
-            os.replace(temp_path, output_path)
+            write_json_file(output_path, result, indent)
             print(f"Result saved to: {output_path}", file=sys.stderr)
         except (PermissionError, OSError) as e:
             print(f"Error: Cannot write to {output_path}: {e}", file=sys.stderr)
             sys.exit(5)
         finally:
             metric_add(metrics, "output_write_seconds", time.perf_counter() - output_write_started_at)
+
+    if markdown_path is not None:
+        markdown_write_started_at = time.perf_counter()
+        markdown_text = extract_markdown_text(result)
+        try:
+            write_markdown_file(markdown_path, markdown_text)
+            print(f"Markdown saved to: {markdown_path}", file=sys.stderr)
+        except (PermissionError, OSError) as e:
+            print(f"Error: Cannot write Markdown to {markdown_path}: {e}", file=sys.stderr)
+            sys.exit(6)
+        finally:
+            metric_add(
+                metrics,
+                "markdown_write_seconds",
+                time.perf_counter() - markdown_write_started_at,
+            )
 
     # Exit code based on result
     metric_add(metrics, "total_seconds", time.perf_counter() - total_started_at)

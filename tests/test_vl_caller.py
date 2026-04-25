@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import vl_caller
 from lib import FILE_TYPE_PDF
+import pdf_to_md
 
 
 def make_chunk_result(text: str, page_marker: str) -> dict:
@@ -136,6 +137,89 @@ class MergeChunkResultsTests(unittest.TestCase):
         merged = vl_caller.merge_chunk_results([error_chunk])
 
         self.assertIs(merged, error_chunk)
+
+
+class MarkdownOutputTests(unittest.TestCase):
+    def test_resolve_markdown_output_path_uses_explicit_path(self):
+        resolved = vl_caller.resolve_markdown_output_path(
+            "~/custom/output.md",
+            "/tmp/input.pdf",
+        )
+        self.assertEqual(resolved, Path("~/custom/output.md").expanduser().resolve())
+
+    def test_resolve_markdown_output_path_uses_input_basename_for_local_file(self):
+        resolved = vl_caller.resolve_markdown_output_path(
+            None,
+            "/tmp/sample.pdf",
+        )
+        self.assertEqual(resolved, Path("/tmp/sample.md").resolve())
+
+    def test_extract_markdown_text_returns_top_level_text(self):
+        self.assertEqual(
+            vl_caller.extract_markdown_text({"text": "# title\n\nbody"}),
+            "# title\n\nbody",
+        )
+
+    def test_extract_markdown_text_falls_back_to_empty_string(self):
+        self.assertEqual(vl_caller.extract_markdown_text({"text": None}), "")
+
+    def test_write_markdown_file_appends_trailing_newline(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "result.md"
+            vl_caller.write_markdown_file(output_path, "# heading")
+            self.assertEqual(output_path.read_text(encoding="utf-8"), "# heading\n")
+
+
+class WrapperScriptTests(unittest.TestCase):
+    def test_build_vl_args_uses_write_markdown_by_default(self):
+        args = SimpleNamespace(
+            file_path="~/docs/sample.pdf",
+            markdown_output=None,
+            output=None,
+            file_type=None,
+            pretty=False,
+            doc_unwarping=False,
+            orientation_classify=False,
+            timing=False,
+            no_cache=False,
+            cache_dir=None,
+        )
+
+        vl_args = pdf_to_md.build_vl_args(args)
+
+        self.assertEqual(vl_args[0], "vl_caller.py")
+        self.assertIn("--file-path", vl_args)
+        self.assertIn("--write-markdown", vl_args)
+        self.assertNotIn("--markdown-output", vl_args)
+
+    def test_build_vl_args_preserves_optional_flags(self):
+        args = SimpleNamespace(
+            file_path="/tmp/sample.pdf",
+            markdown_output="/tmp/out.md",
+            output="/tmp/out.json",
+            file_type=FILE_TYPE_PDF,
+            pretty=True,
+            doc_unwarping=True,
+            orientation_classify=True,
+            timing=True,
+            no_cache=True,
+            cache_dir="/tmp/cache",
+        )
+
+        vl_args = pdf_to_md.build_vl_args(args)
+
+        self.assertIn("--markdown-output", vl_args)
+        self.assertIn("/tmp/out.md", vl_args)
+        self.assertIn("--output", vl_args)
+        self.assertIn("/tmp/out.json", vl_args)
+        self.assertIn("--file-type", vl_args)
+        self.assertIn(str(FILE_TYPE_PDF), vl_args)
+        self.assertIn("--pretty", vl_args)
+        self.assertIn("--doc-unwarping", vl_args)
+        self.assertIn("--orientation-classify", vl_args)
+        self.assertIn("--timing", vl_args)
+        self.assertIn("--no-cache", vl_args)
+        self.assertIn("--cache-dir", vl_args)
 
 
 class AutoSplitTests(unittest.TestCase):
