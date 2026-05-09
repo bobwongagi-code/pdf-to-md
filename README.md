@@ -60,13 +60,24 @@ python scripts/pdf_to_md.py "/path/file.pdf" --no-cache --pretty
 
 # Show timing breakdown
 python scripts/pdf_to_md.py "/path/file.pdf" --timing --pretty
+
+# Tune large-PDF OCR if the default is too slow or too conservative
+python scripts/pdf_to_md.py "/path/file.pdf" --chunk-pages 25 --chunk-workers 1 --pretty
 ```
 
 ## Behavior
 
-- Local PDFs over 100 pages are automatically split and merged
+- PaddleOCR Document Parsing is the primary conversion path
+- Local PDFs over 20 pages are automatically split and merged
+- Large local PDFs default to 20-page chunks and one worker for API stability
+- Increase `--chunk-pages` or `--chunk-workers` only when you know the endpoint can handle the load
+- Failed or empty parses do not overwrite Markdown output
 - Repeat local-file runs can reuse cached results
 - Raw JSON output is preserved for debugging
+- `pypdf` text extraction is not a normal conversion path
+- use `pypdf` only after three whole-file OCR attempts fail, and only after explicit user confirmation
+- whole-file attempt means one command run for one source PDF; internally split chunks do not count as separate attempts
+- any `pypdf` output should be labeled as fallback quality because text-layer extraction can damage sentence flow and meaning
 - `optimize_file.py` only applies to image inputs, not PDFs
 
 ## Validation

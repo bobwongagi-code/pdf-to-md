@@ -37,6 +37,10 @@ python scripts/smoke_test.py --skip-api-test
 1. Use the provided scripts. Do not silently switch to a different parser.
 2. If the API call fails, show the error and stop.
 3. For local files, prefer the wrapper script that writes Markdown directly.
+4. Treat PaddleOCR as the primary path. Do not use `pypdf` during normal conversion.
+5. Do not report success unless a non-empty Markdown file was written.
+6. `pypdf` is only allowed after three whole-file OCR attempts have failed, and only after asking the user for confirmation first.
+7. Count an OCR attempt at the PDF job level: one command run for one source file counts once, even if the script splits that PDF into many chunks internally.
 
 ## Commands
 
@@ -70,14 +74,30 @@ Fresh parse without cache:
 python scripts/pdf_to_md.py "/absolute/path/to/document.pdf" --no-cache --pretty
 ```
 
+Large PDF with explicit stable chunking:
+
+```bash
+python scripts/pdf_to_md.py "/absolute/path/to/report.pdf" --chunk-pages 20 --chunk-workers 1 --pretty
+```
+
 ## Output
 
 - `pdf_to_md.py` writes a same-name `.md` file beside the local source file by default
 - `--markdown-output` writes Markdown to a custom path
+- failed or empty parses do not overwrite Markdown output
 - JSON results are still saved unless `--stdout` is used on `vl_caller.py`
 - read the top-level `text` field when you need the Markdown content from saved JSON
 
 ## Errors
+
+If OCR fails:
+
+- retry OCR up to three whole-file attempts, preferably with smaller chunks for large PDFs
+- do not count individual chunk failures as separate OCR attempts; chunking is an implementation detail of one file-level attempt
+- if all three OCR attempts fail, stop and report the OCR error
+- ask the user before using `pypdf` fallback
+- clearly label any `pypdf` output as fallback quality if the user confirms
+- do not use `pypdf` for convenience, speed, or normal text PDFs
 
 If config is missing, the error will look like:
 

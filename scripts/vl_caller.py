@@ -56,8 +56,8 @@ from lib import FILE_TYPE_IMAGE, FILE_TYPE_PDF, parse_document
 from split_pdf import get_pdf_page_count, split_pdf
 
 __version__ = "2.0.9"
-DEFAULT_MAX_PAGES_PER_REQUEST = 100
-DEFAULT_MAX_CHUNK_WORKERS = 2
+DEFAULT_MAX_PAGES_PER_REQUEST = 20
+DEFAULT_MAX_CHUNK_WORKERS = 1
 DEFAULT_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
 
 
@@ -170,6 +170,55 @@ def write_markdown_file(output_path: Path, markdown_text: str) -> None:
     with temp_path.open("w", encoding="utf-8") as f:
         f.write(content)
     os.replace(temp_path, output_path)
+
+
+def validate_markdown_output(result: dict) -> tuple[bool, str]:
+    if not result.get("ok"):
+        error = result.get("error") or {}
+        message = error.get("message") if isinstance(error, dict) else None
+        return False, message or "parse failed"
+    markdown_text = extract_markdown_text(result).strip()
+    if not markdown_text:
+        return False, "parse succeeded but extracted Markdown text is empty"
+    return True, ""
+
+
+def get_max_pages_per_request(override: Optional[int] = None) -> int:
+    if override is not None:
+        return max(1, override)
+    raw_value = os.getenv("PADDLEOCR_DOC_PARSING_MAX_PAGES_PER_REQUEST", "").strip()
+    if not raw_value:
+        return DEFAULT_MAX_PAGES_PER_REQUEST
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        print(
+            (
+                "Warning: Invalid PADDLEOCR_DOC_PARSING_MAX_PAGES_PER_REQUEST="
+                f"{raw_value!r}; using {DEFAULT_MAX_PAGES_PER_REQUEST}"
+            ),
+            file=sys.stderr,
+        )
+        return DEFAULT_MAX_PAGES_PER_REQUEST
+
+
+def get_max_chunk_workers(override: Optional[int] = None) -> int:
+    if override is not None:
+        return max(1, override)
+    raw_value = os.getenv("PADDLEOCR_DOC_PARSING_MAX_CHUNK_WORKERS", "").strip()
+    if not raw_value:
+        return DEFAULT_MAX_CHUNK_WORKERS
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        print(
+            (
+                "Warning: Invalid PADDLEOCR_DOC_PARSING_MAX_CHUNK_WORKERS="
+                f"{raw_value!r}; using {DEFAULT_MAX_CHUNK_WORKERS}"
+            ),
+            file=sys.stderr,
+        )
+        return DEFAULT_MAX_CHUNK_WORKERS
 
 
 def get_cache_ttl_seconds() -> int:
@@ -310,6 +359,8 @@ def parse_with_auto_split(
     api_url: Optional[str] = None,
     token: Optional[str] = None,
     metrics: Optional[dict[str, float]] = None,
+    chunk_pages: Optional[int] = None,
+    chunk_workers: Optional[int] = None,
     **options,
 ) -> dict:
     resolved_file_type = file_type
@@ -339,7 +390,8 @@ def parse_with_auto_split(
     finally:
         metric_add(metrics, "page_count_seconds", time.perf_counter() - page_count_started_at)
 
-    if total_pages <= DEFAULT_MAX_PAGES_PER_REQUEST:
+    max_pages_per_request = get_max_pages_per_request(chunk_pages)
+    if total_pages <= max_pages_per_request:
         return parse_document(
             file_path=str(input_path),
             file_type=file_type,
@@ -349,25 +401,17 @@ def parse_with_auto_split(
             **options,
         )
 
-    chunk_ranges = build_pdf_chunks(total_pages, DEFAULT_MAX_PAGES_PER_REQUEST)
+    chunk_ranges = build_pdf_chunks(total_pages, max_pages_per_request)
     print(
         (
             f"Large PDF detected ({total_pages} pages). "
             f"Splitting into {len(chunk_ranges)} chunk(s) of up to "
-            f"{DEFAULT_MAX_PAGES_PER_REQUEST} pages."
+            f"{max_pages_per_request} pages."
         ),
         file=sys.stderr,
     )
 
-    max_chunk_workers = max(
-        1,
-        int(
-            os.getenv(
-                "PADDLEOCR_DOC_PARSING_MAX_CHUNK_WORKERS",
-                DEFAULT_MAX_CHUNK_WORKERS,
-            )
-        ),
-    )
+    max_chunk_workers = get_max_chunk_workers(chunk_workers)
     effective_workers = min(max_chunk_workers, len(chunk_ranges))
 
     with tempfile.TemporaryDirectory(prefix="paddleocr_split_") as temp_dir:
@@ -599,6 +643,24 @@ Configuration:
         metavar="DIR",
         help="Custom cache directory for local-file parse results",
     )
+    parser.add_argument(
+        "--chunk-pages",
+        type=int,
+        metavar="N",
+        help=(
+            "Pages per local PDF OCR chunk. Defaults to "
+            f"{DEFAULT_MAX_PAGES_PER_REQUEST} for stability."
+        ),
+    )
+    parser.add_argument(
+        "--chunk-workers",
+        type=int,
+        metavar="N",
+        help=(
+            "Concurrent local PDF OCR chunks. Defaults to "
+            f"{DEFAULT_MAX_CHUNK_WORKERS} to avoid API overload."
+        ),
+    )
 
     args = parser.parse_args()
     total_started_at = time.perf_counter()
@@ -656,6 +718,8 @@ Configuration:
                 api_url=api_url,
                 token=token,
                 metrics=metrics,
+                chunk_pages=args.chunk_pages,
+                chunk_workers=args.chunk_workers,
                 **parse_options,
             )
         else:
@@ -706,6 +770,21 @@ Configuration:
     if markdown_path is not None:
         markdown_write_started_at = time.perf_counter()
         markdown_text = extract_markdown_text(result)
+        markdown_ok, markdown_error = validate_markdown_output(result)
+        if not markdown_ok:
+            print(
+                f"Error: Markdown not written to {markdown_path}: {markdown_error}",
+                file=sys.stderr,
+            )
+            metric_add(
+                metrics,
+                "markdown_write_seconds",
+                time.perf_counter() - markdown_write_started_at,
+            )
+            if timing_enabled(args):
+                metric_add(metrics, "total_seconds", time.perf_counter() - total_started_at)
+                print_timing_summary(metrics)
+            sys.exit(1)
         try:
             write_markdown_file(markdown_path, markdown_text)
             print(f"Markdown saved to: {markdown_path}", file=sys.stderr)

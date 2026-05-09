@@ -183,6 +183,8 @@ class WrapperScriptTests(unittest.TestCase):
             timing=False,
             no_cache=False,
             cache_dir=None,
+            chunk_pages=None,
+            chunk_workers=None,
         )
 
         vl_args = pdf_to_md.build_vl_args(args)
@@ -204,6 +206,8 @@ class WrapperScriptTests(unittest.TestCase):
             timing=True,
             no_cache=True,
             cache_dir="/tmp/cache",
+            chunk_pages=20,
+            chunk_workers=1,
         )
 
         vl_args = pdf_to_md.build_vl_args(args)
@@ -220,6 +224,9 @@ class WrapperScriptTests(unittest.TestCase):
         self.assertIn("--timing", vl_args)
         self.assertIn("--no-cache", vl_args)
         self.assertIn("--cache-dir", vl_args)
+        self.assertIn("--chunk-pages", vl_args)
+        self.assertIn("20", vl_args)
+        self.assertIn("--chunk-workers", vl_args)
 
 
 class AutoSplitTests(unittest.TestCase):
@@ -229,8 +236,8 @@ class AutoSplitTests(unittest.TestCase):
             pdf_path.write_bytes(b"%PDF-1.4\nlarge\n")
 
             parse_results = [
-                make_chunk_result("chunk one", "p1"),
-                make_chunk_result("chunk two", "p2"),
+                make_chunk_result(f"chunk {index}", f"p{index}")
+                for index in range(1, 7)
             ]
 
             with mock.patch("vl_caller.get_pdf_page_count", return_value=114):
@@ -251,11 +258,14 @@ class AutoSplitTests(unittest.TestCase):
                             )
 
             self.assertTrue(result["ok"])
-            self.assertEqual(result["text"], "chunk one\n\nchunk two")
-            self.assertEqual(split_pdf_mock.call_count, 2)
-            self.assertEqual(split_pdf_mock.call_args_list[0].args[2], "1-100")
-            self.assertEqual(split_pdf_mock.call_args_list[1].args[2], "101-114")
-            self.assertEqual(parse_document_mock.call_count, 2)
+            self.assertEqual(
+                result["text"],
+                "chunk 1\n\nchunk 2\n\nchunk 3\n\nchunk 4\n\nchunk 5\n\nchunk 6",
+            )
+            self.assertEqual(split_pdf_mock.call_count, 6)
+            self.assertEqual(split_pdf_mock.call_args_list[0].args[2], "1-20")
+            self.assertEqual(split_pdf_mock.call_args_list[-1].args[2], "101-114")
+            self.assertEqual(parse_document_mock.call_count, 6)
 
     def test_parse_with_auto_split_prefixes_chunk_error_context(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -287,8 +297,49 @@ class AutoSplitTests(unittest.TestCase):
                             )
 
             self.assertFalse(result["ok"])
-            self.assertIn("[chunk 1/2, pages 1-100]", result["error"]["message"])
+            self.assertIn("[chunk 1/6, pages 1-20]", result["error"]["message"])
             self.assertIn("timed out", result["error"]["message"])
+
+    def test_parse_with_auto_split_accepts_chunk_page_override(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "large.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\nlarge\n")
+            parse_results = [
+                make_chunk_result("chunk one", "p1"),
+                make_chunk_result("chunk two", "p2"),
+            ]
+
+            with mock.patch("vl_caller.get_pdf_page_count", return_value=35):
+                with mock.patch("vl_caller.split_pdf") as split_pdf_mock:
+                    with mock.patch(
+                        "vl_caller.parse_document", side_effect=parse_results
+                    ):
+                        result = vl_caller.parse_with_auto_split(
+                            file_path=str(pdf_path),
+                            file_type=FILE_TYPE_PDF,
+                            api_url="https://example.com/layout-parsing",
+                            token="dummy-token",
+                            chunk_pages=25,
+                            chunk_workers=1,
+                        )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(split_pdf_mock.call_count, 2)
+            self.assertEqual(split_pdf_mock.call_args_list[0].args[2], "1-25")
+            self.assertEqual(split_pdf_mock.call_args_list[1].args[2], "26-35")
+
+    def test_validate_markdown_output_rejects_failed_or_empty_results(self):
+        ok, message = vl_caller.validate_markdown_output(
+            {"ok": False, "text": "", "error": {"message": "timed out"}}
+        )
+        self.assertFalse(ok)
+        self.assertEqual(message, "timed out")
+
+        ok, message = vl_caller.validate_markdown_output(
+            {"ok": True, "text": "   ", "error": None}
+        )
+        self.assertFalse(ok)
+        self.assertIn("empty", message)
 
 
 if __name__ == "__main__":

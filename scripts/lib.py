@@ -295,7 +295,7 @@ def _make_api_request(
 
             sleep_seconds = retry_backoff_seconds * (2**attempt)
             logger.warning(
-                "PaddleOCR attempt %s/%s failed: %s. Retrying in %.1fs",
+                "PaddleOCR HTTP attempt %s/%s failed: %s. Retrying in %.1fs",
                 attempt + 1,
                 max_retries + 1,
                 error_message,

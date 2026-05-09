@@ -49,6 +49,10 @@ def build_vl_args(args: argparse.Namespace) -> list[str]:
         vl_args.append("--no-cache")
     if args.cache_dir:
         vl_args.extend(["--cache-dir", args.cache_dir])
+    if args.chunk_pages:
+        vl_args.extend(["--chunk-pages", str(args.chunk_pages)])
+    if args.chunk_workers:
+        vl_args.extend(["--chunk-workers", str(args.chunk_workers)])
     if args.output:
         vl_args.extend(["--output", args.output])
     if args.timing:
@@ -94,6 +98,18 @@ def main() -> None:
     parser.add_argument("--timing", action="store_true", help="Print timing details to stderr")
     parser.add_argument("--no-cache", action="store_true", help="Disable local cache")
     parser.add_argument("--cache-dir", metavar="DIR", help="Custom cache directory")
+    parser.add_argument(
+        "--chunk-pages",
+        type=int,
+        metavar="N",
+        help="Pages per PDF OCR chunk for large local PDFs",
+    )
+    parser.add_argument(
+        "--chunk-workers",
+        type=int,
+        metavar="N",
+        help="Concurrent PDF OCR chunks for large local PDFs",
+    )
 
     args = parser.parse_args()
     sys.argv = build_vl_args(args)
