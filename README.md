@@ -73,6 +73,8 @@ python scripts/pdf_to_md.py "/path/file.pdf" --chunk-pages 25 --chunk-workers 1 
 - Increase `--chunk-pages` or `--chunk-workers` only when you know the endpoint can handle the load
 - Failed or empty parses do not overwrite Markdown output
 - Repeat local-file runs can reuse cached results
+- For large PDF OCR failures, rerun with cache enabled and the same `--chunk-pages` first so successful chunks are reused
+- Use `--no-cache` only when cached content is suspected to be wrong or stale
 - Raw JSON output is preserved for debugging
 - `pypdf` text extraction is not a normal conversion path
 - use `pypdf` only after three whole-file OCR attempts fail, and only after explicit user confirmation

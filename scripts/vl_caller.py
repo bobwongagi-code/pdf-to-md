@@ -351,6 +351,19 @@ def merge_chunk_results(chunk_results: list[dict]) -> dict:
     return merged
 
 
+def append_chunk_retry_hint(error_message: str, use_cache: bool) -> str:
+    cache_hint = (
+        "Rerun the same command with cache enabled and the same --chunk-pages "
+        "to reuse successful chunks and retry only missing ranges."
+    )
+    if not use_cache:
+        cache_hint = (
+            "This run used --no-cache, so successful chunks were not reusable. "
+            "Rerun without --no-cache and keep the same --chunk-pages for resumable retries."
+        )
+    return f"{error_message} {cache_hint}".strip()
+
+
 def parse_with_auto_split(
     file_path: str,
     file_type: Optional[int],
@@ -508,6 +521,7 @@ def parse_with_auto_split(
                     f"[chunk {chunk_index}/{len(chunk_ranges)}, "
                     f"pages {start_page}-{end_page}] {err.get('message', '')}".strip()
                 )
+                err["message"] = append_chunk_retry_hint(err["message"], use_cache)
             return chunk_index, chunk_result, chunk_metrics
 
         with httpx.Client(follow_redirects=True) as client:

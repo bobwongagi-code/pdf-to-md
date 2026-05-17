@@ -41,6 +41,7 @@ python scripts/smoke_test.py --skip-api-test
 5. Do not report success unless a non-empty Markdown file was written.
 6. `pypdf` is only allowed after three whole-file OCR attempts have failed, and only after asking the user for confirmation first.
 7. Count an OCR attempt at the PDF job level: one command run for one source file counts once, even if the script splits that PDF into many chunks internally.
+8. For large PDF OCR retries, keep cache enabled and keep the same `--chunk-pages` first, so successful chunks are reused and only failed chunks are retried.
 
 ## Commands
 
@@ -74,6 +75,8 @@ Fresh parse without cache:
 python scripts/pdf_to_md.py "/absolute/path/to/document.pdf" --no-cache --pretty
 ```
 
+Use `--no-cache` only when you suspect cached content is wrong or stale. Do not use it for normal large-PDF OCR retries.
+
 Large PDF with explicit stable chunking:
 
 ```bash
@@ -94,6 +97,8 @@ If OCR fails:
 
 - retry OCR up to three whole-file attempts, preferably with smaller chunks for large PDFs
 - do not count individual chunk failures as separate OCR attempts; chunking is an implementation detail of one file-level attempt
+- first retry should usually rerun the same command without `--no-cache`, preserving the same `--chunk-pages` so cached successful chunks are reused
+- only shrink `--chunk-pages` after the same page range fails again; changing chunk size prevents reuse of earlier chunk cache for those different page ranges
 - if all three OCR attempts fail, stop and report the OCR error
 - ask the user before using `pypdf` fallback
 - clearly label any `pypdf` output as fallback quality if the user confirms

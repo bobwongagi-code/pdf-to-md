@@ -12,6 +12,7 @@ This project follows a simple keep-a-changelog style format.
 - added `--chunk-pages` and `--chunk-workers` controls for local PDF OCR chunking
 - Markdown output is no longer written when parsing fails or extracted text is empty
 - documented PaddleOCR as the primary conversion path and restricted `pypdf` fallback to explicit user-confirmed use after three whole-file OCR failures
+- documented large-PDF OCR retry rules so successful chunk cache is reused instead of bypassed
 
 ## [2.0.9] - 2026-04-25
 
