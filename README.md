@@ -23,6 +23,17 @@ export PADDLEOCR_ACCESS_TOKEN="your-token"
 export PADDLEOCR_DOC_PARSING_TIMEOUT="120"
 ```
 
+On macOS, prefer storing the access token in Keychain instead of shell config:
+
+```bash
+export PADDLEOCR_DOC_PARSING_API_URL="https://your-endpoint/layout-parsing"
+security add-generic-password \
+  -s "pdf-to-md.paddleocr" \
+  -a "PADDLEOCR_ACCESS_TOKEN" \
+  -w "your-token" \
+  -U
+```
+
 3. Run a quick check:
 
 ```bash
@@ -68,6 +79,7 @@ python scripts/pdf_to_md.py "/path/file.pdf" --chunk-pages 25 --chunk-workers 1 
 ## Behavior
 
 - PaddleOCR Document Parsing is the primary conversion path
+- `PADDLEOCR_ACCESS_TOKEN` is read from the environment first, then macOS Keychain
 - Local PDFs over 20 pages are automatically split and merged
 - Large local PDFs default to 20-page chunks and one worker for API stability
 - Increase `--chunk-pages` or `--chunk-workers` only when you know the endpoint can handle the load

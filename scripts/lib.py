@@ -21,6 +21,9 @@ Simple document parsing API wrapper for PaddleOCR.
 import base64
 import logging
 import os
+import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -43,6 +46,8 @@ API_GUIDE_URL = "https://paddleocr.com"
 FILE_TYPE_PDF = 0
 FILE_TYPE_IMAGE = 1
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
+DEFAULT_KEYCHAIN_SERVICE = "pdf-to-md.paddleocr"
+DEFAULT_KEYCHAIN_ACCOUNT = "PADDLEOCR_ACCESS_TOKEN"
 
 
 def _metric_add(metrics: Optional[dict[str, float]], key: str, delta: float) -> None:
@@ -67,6 +72,59 @@ def _get_env(key: str, *fallback_keys: str) -> str:
             logger.debug(f"Using fallback env var: {fallback}")
             return value
     return ""
+
+
+def _keychain_enabled() -> bool:
+    return _get_env("PADDLEOCR_DISABLE_KEYCHAIN").lower() not in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _get_keychain_secret(service: str, account: str) -> str:
+    """Read a secret from macOS Keychain using the built-in security CLI."""
+    if sys.platform != "darwin" or not _keychain_enabled():
+        return ""
+    security_bin = shutil.which("security")
+    if not security_bin:
+        return ""
+    try:
+        result = subprocess.run(
+            [
+                security_bin,
+                "find-generic-password",
+                "-s",
+                service,
+                "-a",
+                account,
+                "-w",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.debug("Keychain lookup failed: %s", e)
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def _get_access_token() -> tuple[str, str]:
+    token = _get_env("PADDLEOCR_ACCESS_TOKEN")
+    if token:
+        return token, "environment"
+
+    service = _get_env("PADDLEOCR_KEYCHAIN_SERVICE") or DEFAULT_KEYCHAIN_SERVICE
+    account = _get_env("PADDLEOCR_KEYCHAIN_ACCOUNT") or DEFAULT_KEYCHAIN_ACCOUNT
+    token = _get_keychain_secret(service, account)
+    if token:
+        return token, f"keychain:{service}/{account}"
+
+    return "", ""
 
 
 def _get_float_env(key: str, default: float, min_value: float) -> float:
@@ -113,18 +171,18 @@ def _get_int_env(key: str, default: int, min_value: int) -> int:
     return value
 
 
-def get_config() -> tuple[str, str]:
+def get_config_with_sources() -> tuple[str, str, str, str]:
     """
-    Get API URL and token from environment.
+    Get API URL and token from environment or macOS Keychain.
 
     Returns:
-        tuple of (api_url, token)
+        tuple of (api_url, token, api_url_source, token_source)
 
     Raises:
         ValueError: If not configured
     """
     api_url = _get_env("PADDLEOCR_DOC_PARSING_API_URL")
-    token = _get_env("PADDLEOCR_ACCESS_TOKEN")
+    token, token_source = _get_access_token()
 
     if not api_url:
         raise ValueError(
@@ -132,7 +190,8 @@ def get_config() -> tuple[str, str]:
         )
     if not token:
         raise ValueError(
-            f"PADDLEOCR_ACCESS_TOKEN not configured. Get your API at: {API_GUIDE_URL}"
+            "PADDLEOCR_ACCESS_TOKEN not configured in environment or macOS Keychain. "
+            f"Get your API at: {API_GUIDE_URL}"
         )
 
     # Normalize URL
@@ -146,6 +205,14 @@ def get_config() -> tuple[str, str]:
             "Example: https://your-service.paddleocr.com/layout-parsing"
         )
 
+    return api_url, token, "environment", token_source
+
+
+def get_config() -> tuple[str, str]:
+    """
+    Get API URL and token while preserving the existing public return shape.
+    """
+    api_url, token, _, _ = get_config_with_sources()
     return api_url, token
 
 

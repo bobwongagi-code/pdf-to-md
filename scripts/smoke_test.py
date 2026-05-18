@@ -57,6 +57,9 @@ Set environment variables:
   export PADDLEOCR_DOC_PARSING_MAX_RETRIES=2  # optional
   export PADDLEOCR_DOC_PARSING_RETRY_BACKOFF=1.5  # optional
 
+On macOS, store the token in Keychain instead of shell config:
+  security add-generic-password -s pdf-to-md.paddleocr -a PADDLEOCR_ACCESS_TOKEN -w your_token_here -U
+
 ============================================================
 """
     )
@@ -104,13 +107,13 @@ def main():
     # Check configuration
     print("\n[2/3] Checking configuration...")
 
-    from lib import get_config
+    from lib import get_config_with_sources
 
     try:
-        api_url, token = get_config()
-        print(f"  + PADDLEOCR_DOC_PARSING_API_URL: {api_url}")
+        api_url, token, api_url_source, token_source = get_config_with_sources()
+        print(f"  + PADDLEOCR_DOC_PARSING_API_URL: {api_url} ({api_url_source})")
         masked_token = token[:8] + "..." + token[-4:] if len(token) > 12 else "***"
-        print(f"  + PADDLEOCR_ACCESS_TOKEN: {masked_token}")
+        print(f"  + PADDLEOCR_ACCESS_TOKEN: {masked_token} ({token_source})")
         timeout = os.getenv("PADDLEOCR_DOC_PARSING_TIMEOUT", "600")
         retries = os.getenv("PADDLEOCR_DOC_PARSING_MAX_RETRIES", "2")
         backoff = os.getenv("PADDLEOCR_DOC_PARSING_RETRY_BACKOFF", "1.5")

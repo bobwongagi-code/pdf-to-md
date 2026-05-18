@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import vl_caller
+import lib
 from lib import FILE_TYPE_PDF
 import pdf_to_md
 
@@ -110,6 +111,58 @@ class CacheTtlTests(unittest.TestCase):
             payload = json.loads(cache_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["expires_at"], 130)
             self.assertEqual(payload["value"], result)
+
+
+class ConfigTests(unittest.TestCase):
+    def test_get_config_prefers_environment_token_over_keychain(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "PADDLEOCR_DOC_PARSING_API_URL": "https://example.com/layout-parsing",
+                "PADDLEOCR_ACCESS_TOKEN": "env-token",
+            },
+            clear=True,
+        ):
+            with mock.patch("lib._get_keychain_secret", return_value="keychain-token"):
+                api_url, token, api_source, token_source = lib.get_config_with_sources()
+
+        self.assertEqual(api_url, "https://example.com/layout-parsing")
+        self.assertEqual(token, "env-token")
+        self.assertEqual(api_source, "environment")
+        self.assertEqual(token_source, "environment")
+
+    def test_get_config_uses_keychain_token_when_env_token_missing(self):
+        with mock.patch.dict(
+            os.environ,
+            {"PADDLEOCR_DOC_PARSING_API_URL": "example.com/layout-parsing"},
+            clear=True,
+        ):
+            with mock.patch("lib._get_keychain_secret", return_value="keychain-token"):
+                api_url, token, _, token_source = lib.get_config_with_sources()
+
+        self.assertEqual(api_url, "https://example.com/layout-parsing")
+        self.assertEqual(token, "keychain-token")
+        self.assertEqual(token_source, "keychain:pdf-to-md.paddleocr/PADDLEOCR_ACCESS_TOKEN")
+
+    def test_get_config_errors_when_no_env_or_keychain_token(self):
+        with mock.patch.dict(
+            os.environ,
+            {"PADDLEOCR_DOC_PARSING_API_URL": "https://example.com/layout-parsing"},
+            clear=True,
+        ):
+            with mock.patch("lib._get_keychain_secret", return_value=""):
+                with self.assertRaises(ValueError) as ctx:
+                    lib.get_config_with_sources()
+
+        self.assertIn("environment or macOS Keychain", str(ctx.exception))
+
+    def test_get_keychain_secret_respects_disable_flag(self):
+        with mock.patch.dict(os.environ, {"PADDLEOCR_DISABLE_KEYCHAIN": "1"}, clear=True):
+            with mock.patch("lib.subprocess.run") as run_mock:
+                token = lib._get_keychain_secret("pdf-to-md.paddleocr", "PADDLEOCR_ACCESS_TOKEN")
+
+        self.assertEqual(token, "")
+        run_mock.assert_not_called()
 
 
 class MergeChunkResultsTests(unittest.TestCase):

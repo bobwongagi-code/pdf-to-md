@@ -32,6 +32,12 @@ Before first real use:
 python scripts/smoke_test.py --skip-api-test
 ```
 
+On macOS, prefer storing the access token in Keychain instead of shell config:
+
+```bash
+security add-generic-password -s "pdf-to-md.paddleocr" -a "PADDLEOCR_ACCESS_TOKEN" -w "your-token" -U
+```
+
 ## Rules
 
 1. Use the provided scripts. Do not silently switch to a different parser.
@@ -42,6 +48,7 @@ python scripts/smoke_test.py --skip-api-test
 6. `pypdf` is only allowed after three whole-file OCR attempts have failed, and only after asking the user for confirmation first.
 7. Count an OCR attempt at the PDF job level: one command run for one source file counts once, even if the script splits that PDF into many chunks internally.
 8. For large PDF OCR retries, keep cache enabled and keep the same `--chunk-pages` first, so successful chunks are reused and only failed chunks are retried.
+9. Do not store live API tokens in tracked files. Prefer `PADDLEOCR_ACCESS_TOKEN` from the environment or macOS Keychain fallback.
 
 ## Commands
 
@@ -113,7 +120,7 @@ CONFIG_ERROR: PADDLEOCR_DOC_PARSING_API_URL not configured. Get your API at: htt
 Required environment variables:
 
 - `PADDLEOCR_DOC_PARSING_API_URL`
-- `PADDLEOCR_ACCESS_TOKEN`
+- `PADDLEOCR_ACCESS_TOKEN` or macOS Keychain item `service=pdf-to-md.paddleocr`, `account=PADDLEOCR_ACCESS_TOKEN`
 - optional: `PADDLEOCR_DOC_PARSING_TIMEOUT`
 
 Do not paste live credentials into tracked files.
