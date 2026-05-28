@@ -25,7 +25,6 @@ Usage:
 
 import argparse
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -107,16 +106,21 @@ def main():
     # Check configuration
     print("\n[2/3] Checking configuration...")
 
-    from lib import get_config_with_sources
+    from lib import (
+        DEFAULT_MAX_RETRIES,
+        DEFAULT_RETRY_BACKOFF,
+        DEFAULT_TIMEOUT,
+        _get_setting,
+        get_config_with_sources,
+    )
 
     try:
-        api_url, token, api_url_source, token_source = get_config_with_sources()
+        api_url, _, api_url_source, token_source = get_config_with_sources()
         print(f"  + PADDLEOCR_DOC_PARSING_API_URL: {api_url} ({api_url_source})")
-        masked_token = token[:8] + "..." + token[-4:] if len(token) > 12 else "***"
-        print(f"  + PADDLEOCR_ACCESS_TOKEN: {masked_token} ({token_source})")
-        timeout = os.getenv("PADDLEOCR_DOC_PARSING_TIMEOUT", "600")
-        retries = os.getenv("PADDLEOCR_DOC_PARSING_MAX_RETRIES", "2")
-        backoff = os.getenv("PADDLEOCR_DOC_PARSING_RETRY_BACKOFF", "1.5")
+        print(f"  + PADDLEOCR_ACCESS_TOKEN: configured ({token_source})")
+        timeout = _get_setting("PADDLEOCR_DOC_PARSING_TIMEOUT") or str(DEFAULT_TIMEOUT)
+        retries = _get_setting("PADDLEOCR_DOC_PARSING_MAX_RETRIES") or str(DEFAULT_MAX_RETRIES)
+        backoff = _get_setting("PADDLEOCR_DOC_PARSING_RETRY_BACKOFF") or str(DEFAULT_RETRY_BACKOFF)
         print(f"  + PADDLEOCR_DOC_PARSING_TIMEOUT: {timeout}")
         print(f"  + PADDLEOCR_DOC_PARSING_MAX_RETRIES: {retries}")
         print(f"  + PADDLEOCR_DOC_PARSING_RETRY_BACKOFF: {backoff}")

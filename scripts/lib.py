@@ -46,6 +46,7 @@ API_GUIDE_URL = "https://paddleocr.com"
 FILE_TYPE_PDF = 0
 FILE_TYPE_IMAGE = 1
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / "pdf-to-md" / "config.env"
 DEFAULT_KEYCHAIN_SERVICE = "pdf-to-md.paddleocr"
 DEFAULT_KEYCHAIN_ACCOUNT = "PADDLEOCR_ACCESS_TOKEN"
 
@@ -72,6 +73,31 @@ def _get_env(key: str, *fallback_keys: str) -> str:
             logger.debug(f"Using fallback env var: {fallback}")
             return value
     return ""
+
+
+def _get_local_config(key: str) -> str:
+    """Read non-secret settings for Finder Quick Action executions."""
+    config_path = Path(
+        _get_env("PDF_TO_MD_CONFIG_FILE") or DEFAULT_CONFIG_PATH
+    ).expanduser()
+    if not config_path.is_file():
+        return ""
+    try:
+        for raw_line in config_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            setting_key, value = line.split("=", 1)
+            if setting_key.strip() == key:
+                return value.strip().strip('"').strip("'")
+    except OSError as e:
+        logger.debug("Failed to read local config %s: %s", config_path, e)
+    return ""
+
+
+def _get_setting(key: str) -> str:
+    """Read a non-secret setting from the environment, then local config."""
+    return _get_env(key) or _get_local_config(key)
 
 
 def _keychain_enabled() -> bool:
@@ -129,7 +155,7 @@ def _get_access_token() -> tuple[str, str]:
 
 def _get_float_env(key: str, default: float, min_value: float) -> float:
     """Read a positive float env var with fallback to default."""
-    raw_value = _get_env(key)
+    raw_value = _get_setting(key)
     if not raw_value:
         return default
     try:
@@ -151,7 +177,7 @@ def _get_float_env(key: str, default: float, min_value: float) -> float:
 
 def _get_int_env(key: str, default: int, min_value: int) -> int:
     """Read an integer env var with fallback to default."""
-    raw_value = _get_env(key)
+    raw_value = _get_setting(key)
     if not raw_value:
         return default
     try:
@@ -181,7 +207,7 @@ def get_config_with_sources() -> tuple[str, str, str, str]:
     Raises:
         ValueError: If not configured
     """
-    api_url = _get_env("PADDLEOCR_DOC_PARSING_API_URL")
+    api_url = _get_setting("PADDLEOCR_DOC_PARSING_API_URL")
     token, token_source = _get_access_token()
 
     if not api_url:
@@ -205,7 +231,10 @@ def get_config_with_sources() -> tuple[str, str, str, str]:
             "Example: https://your-service.paddleocr.com/layout-parsing"
         )
 
-    return api_url, token, "environment", token_source
+    api_url_source = (
+        "environment" if _get_env("PADDLEOCR_DOC_PARSING_API_URL") else "local-config"
+    )
+    return api_url, token, api_url_source, token_source
 
 
 def get_config() -> tuple[str, str]:
@@ -321,7 +350,14 @@ def _make_api_request(
     try:
         for attempt in range(max_retries + 1):
             try:
-                resp = client.post(api_url, json=params, headers=headers)
+                # Pass timeout per request so callers that reuse a client cannot
+                # accidentally bypass the configured OCR timeout policy.
+                resp = client.post(
+                    api_url,
+                    json=params,
+                    headers=headers,
+                    timeout=timeout,
+                )
             except httpx.TimeoutException:
                 error_message = f"API request timed out after {timeout_seconds}s"
                 should_retry = True

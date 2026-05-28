@@ -52,19 +52,13 @@ if not logging.getLogger().handlers:
 # Add scripts dir to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib import FILE_TYPE_IMAGE, FILE_TYPE_PDF, parse_document
+from lib import FILE_TYPE_IMAGE, FILE_TYPE_PDF, parse_document, _metric_add as metric_add
 from split_pdf import get_pdf_page_count, split_pdf
 
 __version__ = "2.0.9"
 DEFAULT_MAX_PAGES_PER_REQUEST = 20
 DEFAULT_MAX_CHUNK_WORKERS = 1
 DEFAULT_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
-
-
-def metric_add(metrics: Optional[dict[str, float]], key: str, delta: float) -> None:
-    if metrics is None:
-        return
-    metrics[key] = metrics.get(key, 0.0) + delta
 
 
 def merge_metrics(
@@ -222,15 +216,11 @@ def get_max_chunk_workers(override: Optional[int] = None) -> int:
 
 
 def get_cache_ttl_seconds() -> int:
-    return max(
-        1,
-        int(
-            os.getenv(
-                "PADDLEOCR_DOC_PARSING_CACHE_TTL_SECONDS",
-                DEFAULT_CACHE_TTL_SECONDS,
-            )
-        ),
-    )
+    raw = os.getenv("PADDLEOCR_DOC_PARSING_CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS)
+    try:
+        return max(1, int(raw))
+    except (ValueError, TypeError):
+        return int(DEFAULT_CACHE_TTL_SECONDS)
 
 
 def build_cache_key(args, options: dict) -> Optional[str]:
@@ -324,7 +314,8 @@ def merge_chunk_results(chunk_results: list[dict]) -> dict:
     if not chunk_results:
         raise ValueError("No chunk results to merge")
 
-    merged = chunk_results[0]
+    import copy
+    merged = copy.deepcopy(chunk_results[0])
     merged_texts = []
     merged_pages = []
 

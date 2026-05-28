@@ -51,6 +51,24 @@ This writes:
 - a same-name Markdown file beside the source PDF
 - a JSON result file for debugging, with the saved path printed to stderr
 
+## Finder Quick Action
+
+On macOS, install the Finder right-click action once:
+
+```bash
+python scripts/install_quick_action.py --store-env-token
+```
+
+The installer:
+
+- installs `转为 Markdown (OCR)` in Finder Quick Actions
+- writes non-secret endpoint settings to `~/.config/pdf-to-md/config.env`
+- stores the current `PADDLEOCR_ACCESS_TOKEN` in Keychain when `--store-env-token` is used
+
+After installation, select one or more PDF files in Finder and choose `Quick Actions > 转为 Markdown (OCR)`. Conversion runs in the background, immediately confirms that the task started, writes Markdown beside each PDF, preserves chunk cache for resume, and sends completion notifications. Failed conversions show a foreground error with a `查看日志` button. Logs and task status JSON are written under `~/Library/Logs/pdf-to-md/`.
+
+The first time after installation, open `Quick Actions > Customize...` and enable `转为 Markdown (OCR)` in Finder extensions. Re-run the installer only if the Python environment, configuration, or skill implementation changes.
+
 ## Common Commands
 
 ```bash
@@ -80,6 +98,7 @@ python scripts/pdf_to_md.py "/path/file.pdf" --chunk-pages 25 --chunk-workers 1 
 
 - PaddleOCR Document Parsing is the primary conversion path
 - `PADDLEOCR_ACCESS_TOKEN` is read from the environment first, then macOS Keychain
+- `PADDLEOCR_DOC_PARSING_API_URL` is read from the environment first, then `~/.config/pdf-to-md/config.env` for Finder execution
 - Local PDFs over 20 pages are automatically split and merged
 - Large local PDFs default to 20-page chunks and one worker for API stability
 - Increase `--chunk-pages` or `--chunk-workers` only when you know the endpoint can handle the load

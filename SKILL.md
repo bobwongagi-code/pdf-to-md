@@ -90,6 +90,14 @@ Large PDF with explicit stable chunking:
 python scripts/pdf_to_md.py "/absolute/path/to/report.pdf" --chunk-pages 20 --chunk-workers 1 --pretty
 ```
 
+Install macOS Finder Quick Action once:
+
+```bash
+python scripts/install_quick_action.py --store-env-token
+```
+
+After installation, enable `转为 Markdown (OCR)` once in Finder `Quick Actions > Customize...`. Finder can then run selected PDFs through `Quick Actions > 转为 Markdown (OCR)` in the background without opening Codex. It confirms task start immediately; conversion failures show a foreground alert with a log shortcut. Logs and task status JSON are written to `~/Library/Logs/pdf-to-md/`.
+
 ## Output
 
 - `pdf_to_md.py` writes a same-name `.md` file beside the local source file by default
@@ -119,7 +127,7 @@ CONFIG_ERROR: PADDLEOCR_DOC_PARSING_API_URL not configured. Get your API at: htt
 
 Required environment variables:
 
-- `PADDLEOCR_DOC_PARSING_API_URL`
+- `PADDLEOCR_DOC_PARSING_API_URL` or local Finder config `~/.config/pdf-to-md/config.env`
 - `PADDLEOCR_ACCESS_TOKEN` or macOS Keychain item `service=pdf-to-md.paddleocr`, `account=PADDLEOCR_ACCESS_TOKEN`
 - optional: `PADDLEOCR_DOC_PARSING_TIMEOUT`
 

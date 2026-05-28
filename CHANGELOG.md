@@ -14,6 +14,7 @@ This project follows a simple keep-a-changelog style format.
 - documented PaddleOCR as the primary conversion path and restricted `pypdf` fallback to explicit user-confirmed use after three whole-file OCR failures
 - documented large-PDF OCR retry rules so successful chunk cache is reused instead of bypassed
 - added macOS Keychain fallback for `PADDLEOCR_ACCESS_TOKEN` so tokens do not need to live in shell config
+- added a one-time macOS Finder Quick Action installer and background batch runner for right-click PDF conversion
 
 ## [2.0.9] - 2026-04-25
 

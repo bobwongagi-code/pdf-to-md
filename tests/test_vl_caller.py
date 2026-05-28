@@ -1,5 +1,6 @@
 import json
 import os
+import plistlib
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import vl_caller
 import lib
 from lib import FILE_TYPE_PDF
+import install_quick_action
+import pdf_to_md_batch
 import pdf_to_md
 
 
@@ -144,6 +147,24 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(token, "keychain-token")
         self.assertEqual(token_source, "keychain:pdf-to-md.paddleocr/PADDLEOCR_ACCESS_TOKEN")
 
+    def test_get_config_reads_api_url_from_local_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.env"
+            config_path.write_text(
+                "PADDLEOCR_DOC_PARSING_API_URL=https://example.com/layout-parsing\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ,
+                {"PDF_TO_MD_CONFIG_FILE": str(config_path)},
+                clear=True,
+            ):
+                with mock.patch("lib._get_keychain_secret", return_value="keychain-token"):
+                    api_url, _, api_source, _ = lib.get_config_with_sources()
+
+        self.assertEqual(api_url, "https://example.com/layout-parsing")
+        self.assertEqual(api_source, "local-config")
+
     def test_get_config_errors_when_no_env_or_keychain_token(self):
         with mock.patch.dict(
             os.environ,
@@ -163,6 +184,141 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(token, "")
         run_mock.assert_not_called()
+
+
+class ApiRequestTests(unittest.TestCase):
+    def test_make_api_request_applies_configured_timeout_to_reused_client(self):
+        client = mock.Mock()
+        response = SimpleNamespace(
+            status_code=200,
+            json=lambda: {"errorCode": 0},
+        )
+        client.post.return_value = response
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "PADDLEOCR_DOC_PARSING_TIMEOUT": "120",
+                "PADDLEOCR_DOC_PARSING_CONNECT_TIMEOUT": "7",
+                "PADDLEOCR_DOC_PARSING_MAX_RETRIES": "0",
+            },
+            clear=True,
+        ):
+            lib._make_api_request(
+                "https://example.com/layout-parsing",
+                "token",
+                {"file": "payload"},
+                client=client,
+            )
+
+        timeout = client.post.call_args.kwargs["timeout"]
+        self.assertEqual(timeout.read, 120)
+        self.assertEqual(timeout.connect, 7)
+
+
+class QuickActionTests(unittest.TestCase):
+    def test_batch_runner_converts_files_sequentially_and_writes_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "input.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\nsample\n")
+            log_path = Path(temp_dir) / "run.log"
+
+            def fake_run(cmd, **kwargs):
+                if "pdf_to_md.py" in str(cmd[1]):
+                    pdf_path.with_suffix(".md").write_text("converted\n", encoding="utf-8")
+                return SimpleNamespace(returncode=0)
+
+            with mock.patch.dict(
+                os.environ, {"PDF_TO_MD_LOG_FILE": str(log_path)}, clear=False
+            ):
+                with mock.patch("pdf_to_md_batch.subprocess.run", side_effect=fake_run):
+                    exit_code = pdf_to_md_batch.main([str(pdf_path)])
+
+            status = json.loads(log_path.with_suffix(".json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(status["state"], "completed")
+            self.assertTrue(status["results"][0]["ok"])
+            self.assertEqual(
+                Path(status["results"][0]["output"]),
+                pdf_path.resolve().with_suffix(".md"),
+            )
+
+    def test_batch_runner_records_running_state_before_work(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "input.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\nsample\n")
+            log_path = Path(temp_dir) / "run.log"
+            captured = {}
+
+            def fake_run_batch(paths, passed_log_path):
+                captured.update(
+                    json.loads(log_path.with_suffix(".json").read_text(encoding="utf-8"))
+                )
+                return [], 0
+
+            with mock.patch.dict(
+                os.environ, {"PDF_TO_MD_LOG_FILE": str(log_path)}, clear=False
+            ):
+                with mock.patch("pdf_to_md_batch.run_batch", side_effect=fake_run_batch):
+                    pdf_to_md_batch.main([str(pdf_path)])
+
+            self.assertEqual(captured["state"], "running")
+            self.assertEqual(captured["files"], [str(pdf_path.resolve())])
+
+    def test_batch_runner_displays_foreground_alert_for_failed_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = Path(temp_dir) / "broken.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\nsample\n")
+            log_path = Path(temp_dir) / "run.log"
+
+            with mock.patch.dict(
+                os.environ, {"PDF_TO_MD_LOG_FILE": str(log_path)}, clear=False
+            ):
+                with mock.patch("pdf_to_md_batch.run_batch", return_value=(
+                    [{"file": str(pdf_path), "output": str(pdf_path.with_suffix(".md")), "ok": False}],
+                    1,
+                )):
+                    with mock.patch("pdf_to_md_batch.alert_failure") as alert_mock:
+                        exit_code = pdf_to_md_batch.main([str(pdf_path)])
+
+            status = json.loads(log_path.with_suffix(".json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(status["state"], "failed")
+            alert_mock.assert_called_once()
+            self.assertIn("broken.pdf", alert_mock.call_args.args[0])
+
+    def test_installer_generates_native_pdf_quick_action_workflow(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workflow_path = Path(temp_dir) / "Quick Action.workflow"
+            runner_path = Path(temp_dir) / "run_quick_action.sh"
+            with mock.patch.object(install_quick_action, "WORKFLOW_PATH", workflow_path):
+                installed_path = install_quick_action.install_workflow(runner_path)
+
+            with (installed_path / "Contents" / "Info.plist").open("rb") as source:
+                info = plistlib.load(source)
+            with (installed_path / "Contents" / "document.wflow").open("rb") as source:
+                workflow = plistlib.load(source)
+
+            self.assertEqual(info["NSServices"][0]["NSSendFileTypes"], ["com.adobe.pdf"])
+            self.assertEqual(info["NSServices"][0]["NSIconName"], "NSActionTemplate")
+            command = workflow["actions"][0]["action"]["ActionParameters"]["COMMAND_STRING"]
+            self.assertIn(str(runner_path), command)
+            self.assertIn("PDF_TO_MD_PYTHON=", command)
+            self.assertEqual(
+                workflow["workflowMetaData"]["serviceInputTypeIdentifier"],
+                "com.apple.Automator.fileSystemObject.PDF",
+            )
+            self.assertEqual(workflow["workflowMetaData"]["presentationMode"], 15)
+            self.assertNotIn("serviceApplicationBundleID", workflow["workflowMetaData"])
+
+    def test_installer_runtime_includes_split_pdf_dependency(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_dir = Path(temp_dir) / "runtime"
+            with mock.patch.object(install_quick_action, "RUNTIME_DIR", runtime_dir):
+                runner_path = install_quick_action.install_runtime()
+
+            self.assertTrue((runtime_dir / "split_pdf.py").is_file())
+            self.assertEqual(runner_path, runtime_dir / "run_quick_action.sh")
 
 
 class MergeChunkResultsTests(unittest.TestCase):
