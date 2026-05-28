@@ -287,6 +287,7 @@ class QuickActionTests(unittest.TestCase):
             alert_mock.assert_called_once()
             self.assertIn("broken.pdf", alert_mock.call_args.args[0])
 
+    @unittest.skipUnless(sys.platform == "darwin", "requires macOS Automator template")
     def test_installer_generates_native_pdf_quick_action_workflow(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workflow_path = Path(temp_dir) / "Quick Action.workflow"
