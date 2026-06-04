@@ -29,6 +29,7 @@ RUNTIME_FILES = (
     "pdf_to_md_batch.py",
     "run_quick_action.sh",
 )
+WORKFLOW_FILE_TYPES = ["com.adobe.pdf", "public.image"]
 
 
 def write_config(api_url: str, timeout: Optional[str]) -> Path:
@@ -89,7 +90,7 @@ def install_workflow(runner_path: Path = RUNNER_PATH) -> Path:
                 "NSIconName": "NSActionTemplate",
                 "NSMenuItem": {"default": WORKFLOW_NAME},
                 "NSMessage": "runWorkflowAsService",
-                "NSSendFileTypes": ["com.adobe.pdf"],
+                "NSSendFileTypes": WORKFLOW_FILE_TYPES,
             }
         ],
     }
@@ -109,11 +110,11 @@ def install_workflow(runner_path: Path = RUNNER_PATH) -> Path:
     workflow["workflowMetaData"] = {
         "applicationBundleIDsByPath": {},
         "applicationPaths": [],
-        "inputTypeIdentifier": "com.apple.Automator.fileSystemObject.PDF",
+        "inputTypeIdentifier": "com.apple.Automator.fileSystemObject",
         "outputTypeIdentifier": "com.apple.Automator.nothing",
         "presentationMode": 15,
         "processesInput": False,
-        "serviceInputTypeIdentifier": "com.apple.Automator.fileSystemObject.PDF",
+        "serviceInputTypeIdentifier": "com.apple.Automator.fileSystemObject",
         "serviceOutputTypeIdentifier": "com.apple.Automator.nothing",
         "serviceProcessesInput": False,
         "systemImageName": "NSActionTemplate",
@@ -133,7 +134,7 @@ def refresh_services() -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Install the PDF to Markdown Finder Quick Action.")
+    parser = argparse.ArgumentParser(description="Install the PDF/image to Markdown Finder Quick Action.")
     parser.add_argument(
         "--api-url",
         default=os.getenv("PADDLEOCR_DOC_PARSING_API_URL", ""),
@@ -171,7 +172,7 @@ def main() -> int:
     print(f"Local config written: {config_path}")
     if args.store_env_token:
         print(f"Access token stored in Keychain service: {DEFAULT_KEYCHAIN_SERVICE}")
-    print("In Finder: select PDF files, then use Quick Actions > 转为 Markdown (OCR).")
+    print("In Finder: select PDF or image files, then use Quick Actions > 转为 Markdown (OCR).")
     return 0
 
 

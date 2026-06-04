@@ -243,6 +243,37 @@ class QuickActionTests(unittest.TestCase):
                 pdf_path.resolve().with_suffix(".md"),
             )
 
+    def test_batch_runner_converts_image_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "scan.png"
+            image_path.write_bytes(b"\x89PNG\r\n\x1a\nsample\n")
+            log_path = Path(temp_dir) / "run.log"
+
+            def fake_run(cmd, **kwargs):
+                if "pdf_to_md.py" in str(cmd[1]):
+                    image_path.with_suffix(".md").write_text("converted\n", encoding="utf-8")
+                return SimpleNamespace(returncode=0)
+
+            with mock.patch.dict(
+                os.environ, {"PDF_TO_MD_LOG_FILE": str(log_path)}, clear=False
+            ):
+                with mock.patch("pdf_to_md_batch.subprocess.run", side_effect=fake_run) as run_mock:
+                    exit_code = pdf_to_md_batch.main([str(image_path)])
+
+            status = json.loads(log_path.with_suffix(".json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(status["state"], "completed")
+            self.assertTrue(status["results"][0]["ok"])
+            self.assertEqual(
+                Path(status["results"][0]["output"]),
+                image_path.resolve().with_suffix(".md"),
+            )
+            ocr_call = next(
+                call for call in run_mock.call_args_list
+                if "pdf_to_md.py" in str(call.args[0][1])
+            )
+            self.assertEqual(ocr_call.kwargs["timeout"], pdf_to_md_batch.OCR_TIMEOUT_MAX_SECONDS)
+
     def test_batch_runner_records_running_state_before_work(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             pdf_path = Path(temp_dir) / "input.pdf"
@@ -288,7 +319,7 @@ class QuickActionTests(unittest.TestCase):
             self.assertIn("broken.pdf", alert_mock.call_args.args[0])
 
     @unittest.skipUnless(sys.platform == "darwin", "requires macOS Automator template")
-    def test_installer_generates_native_pdf_quick_action_workflow(self):
+    def test_installer_generates_native_pdf_and_image_quick_action_workflow(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workflow_path = Path(temp_dir) / "Quick Action.workflow"
             runner_path = Path(temp_dir) / "run_quick_action.sh"
@@ -300,14 +331,17 @@ class QuickActionTests(unittest.TestCase):
             with (installed_path / "Contents" / "document.wflow").open("rb") as source:
                 workflow = plistlib.load(source)
 
-            self.assertEqual(info["NSServices"][0]["NSSendFileTypes"], ["com.adobe.pdf"])
+            self.assertEqual(
+                info["NSServices"][0]["NSSendFileTypes"],
+                ["com.adobe.pdf", "public.image"],
+            )
             self.assertEqual(info["NSServices"][0]["NSIconName"], "NSActionTemplate")
             command = workflow["actions"][0]["action"]["ActionParameters"]["COMMAND_STRING"]
             self.assertIn(str(runner_path), command)
             self.assertIn("PDF_TO_MD_PYTHON=", command)
             self.assertEqual(
                 workflow["workflowMetaData"]["serviceInputTypeIdentifier"],
-                "com.apple.Automator.fileSystemObject.PDF",
+                "com.apple.Automator.fileSystemObject",
             )
             self.assertEqual(workflow["workflowMetaData"]["presentationMode"], 15)
             self.assertNotIn("serviceApplicationBundleID", workflow["workflowMetaData"])

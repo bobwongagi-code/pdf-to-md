@@ -40,15 +40,16 @@ security add-generic-password \
 python scripts/smoke_test.py --skip-api-test
 ```
 
-4. Convert a local PDF to Markdown:
+4. Convert a local PDF or document image to Markdown:
 
 ```bash
 python scripts/pdf_to_md.py "/absolute/path/to/document.pdf" --pretty
+python scripts/pdf_to_md.py "/absolute/path/to/scan.png" --pretty
 ```
 
 This writes:
 
-- a same-name Markdown file beside the source PDF
+- a same-name Markdown file beside the source PDF or image
 - a JSON result file for debugging, with the saved path printed to stderr
 
 ## Finder Quick Action
@@ -65,7 +66,7 @@ The installer:
 - writes non-secret endpoint settings to `~/.config/pdf-to-md/config.env`
 - stores the current `PADDLEOCR_ACCESS_TOKEN` in Keychain when `--store-env-token` is used
 
-After installation, select one or more PDF files in Finder and choose `Quick Actions > 转为 Markdown (OCR)`. Conversion runs in the background, immediately confirms that the task started, writes Markdown beside each PDF, preserves chunk cache for resume, and sends completion notifications. Failed conversions show a foreground error with a `查看日志` button. Logs and task status JSON are written under `~/Library/Logs/pdf-to-md/`.
+After installation, select one or more PDF or image files in Finder and choose `Quick Actions > 转为 Markdown (OCR)`. Conversion runs in the background, immediately confirms that the task started, writes Markdown beside each source file, preserves chunk cache for PDF resume, and sends completion notifications. Failed conversions show a foreground error with a `查看日志` button. Logs and task status JSON are written under `~/Library/Logs/pdf-to-md/`.
 
 The first time after installation, open `Quick Actions > Customize...` and enable `转为 Markdown (OCR)` in Finder extensions. Re-run the installer only if the Python environment, configuration, or skill implementation changes.
 
@@ -75,13 +76,16 @@ The first time after installation, open `Quick Actions > Customize...` and enabl
 # Local PDF -> same-name Markdown file + saved JSON
 python scripts/pdf_to_md.py "/path/file.pdf" --pretty
 
+# Local image -> same-name Markdown file + saved JSON
+python scripts/pdf_to_md.py "/path/file.png" --pretty
+
 # Local PDF -> custom Markdown output path
 python scripts/pdf_to_md.py "/path/file.pdf" --markdown-output "/path/file.md" --pretty
 
 # Remote PDF URL -> saved JSON result
 python scripts/vl_caller.py --file-url "https://example.com/file.pdf" --file-type 0 --pretty
 
-# Local image -> saved JSON result
+# Local image -> saved JSON result only
 python scripts/vl_caller.py --file-path "/path/file.png" --file-type 1 --pretty
 
 # Re-run without cache
@@ -99,6 +103,7 @@ python scripts/pdf_to_md.py "/path/file.pdf" --chunk-pages 25 --chunk-workers 1 
 - PaddleOCR Document Parsing is the primary conversion path
 - `PADDLEOCR_ACCESS_TOKEN` is read from the environment first, then macOS Keychain
 - `PADDLEOCR_DOC_PARSING_API_URL` is read from the environment first, then `~/.config/pdf-to-md/config.env` for Finder execution
+- Local images use PaddleOCR image parsing and write same-name Markdown by default
 - Local PDFs over 20 pages are automatically split and merged
 - Large local PDFs default to 20-page chunks and one worker for API stability
 - Increase `--chunk-pages` or `--chunk-workers` only when you know the endpoint can handle the load

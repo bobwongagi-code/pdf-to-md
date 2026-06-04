@@ -8,7 +8,7 @@ description: Convert PDFs and document images into Markdown and structured JSON 
 Use this skill when the user wants a PDF or document image converted into Markdown, especially for:
 
 - PDFs with tables, formulas, charts, or multi-column layout
-- local PDFs where a same-name `.md` file should be written beside the source file
+- local PDFs or document images where a same-name `.md` file should be written beside the source file
 - cases where raw structured JSON should also be preserved for debugging
 
 Use `python scripts/pdf_to_md.py` for the normal local-file flow.
@@ -58,6 +58,12 @@ Local file:
 python scripts/pdf_to_md.py "/absolute/path/to/document.pdf" --pretty
 ```
 
+Local image:
+
+```bash
+python scripts/pdf_to_md.py "/absolute/path/to/scan.png" --pretty
+```
+
 Local file with explicit Markdown path:
 
 ```bash
@@ -96,11 +102,11 @@ Install macOS Finder Quick Action once:
 python scripts/install_quick_action.py --store-env-token
 ```
 
-After installation, enable `转为 Markdown (OCR)` once in Finder `Quick Actions > Customize...`. Finder can then run selected PDFs through `Quick Actions > 转为 Markdown (OCR)` in the background without opening Codex. It confirms task start immediately; conversion failures show a foreground alert with a log shortcut. Logs and task status JSON are written to `~/Library/Logs/pdf-to-md/`.
+After installation, enable `转为 Markdown (OCR)` once in Finder `Quick Actions > Customize...`. Finder can then run selected PDFs or images through `Quick Actions > 转为 Markdown (OCR)` in the background without opening Codex. It confirms task start immediately; conversion failures show a foreground alert with a log shortcut. Logs and task status JSON are written to `~/Library/Logs/pdf-to-md/`.
 
 ## Output
 
-- `pdf_to_md.py` writes a same-name `.md` file beside the local source file by default
+- `pdf_to_md.py` writes a same-name `.md` file beside the local PDF or image by default
 - `--markdown-output` writes Markdown to a custom path
 - failed or empty parses do not overwrite Markdown output
 - JSON results are still saved unless `--stdout` is used on `vl_caller.py`

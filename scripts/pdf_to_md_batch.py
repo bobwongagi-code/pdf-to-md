@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sequential background-friendly PDF to Markdown conversion entry point."""
+"""Sequential background-friendly document/image to Markdown conversion entry point."""
 
 import json
 import os
@@ -9,19 +9,28 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 
+from lib import IMAGE_EXTENSIONS
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_DIR = Path.home() / "Library" / "Logs" / "pdf-to-md"
 OCR_TIMEOUT_BASE_SECONDS = 60
 OCR_TIMEOUT_PER_PAGE_SECONDS = 30
 OCR_TIMEOUT_MAX_SECONDS = 1800
+SUPPORTED_EXTENSIONS = (".pdf",) + IMAGE_EXTENSIONS
 
 
-def _ocr_timeout_for_file(pdf_path: Path) -> int:
+def _is_supported_input(path: Path) -> bool:
+    return path.suffix.lower() in SUPPORTED_EXTENSIONS
+
+
+def _ocr_timeout_for_file(path: Path) -> int:
     """Calculate timeout: 60s base + 30s per page, capped at 1800s."""
+    if path.suffix.lower() != ".pdf":
+        return OCR_TIMEOUT_MAX_SECONDS
     try:
         from pypdf import PdfReader
-        page_count = len(PdfReader(str(pdf_path)).pages)
+        page_count = len(PdfReader(str(path)).pages)
     except Exception:
         return OCR_TIMEOUT_MAX_SECONDS
     return min(OCR_TIMEOUT_BASE_SECONDS + OCR_TIMEOUT_PER_PAGE_SECONDS * page_count, OCR_TIMEOUT_MAX_SECONDS)
@@ -78,11 +87,11 @@ def run_batch(paths: list[Path], log_path: Path) -> tuple[list[dict], int]:
     with log_path.open("a", encoding="utf-8") as log:
         for index, path in enumerate(paths, start=1):
             output_path = path.with_suffix(".md")
-            if not path.is_file() or path.suffix.lower() != ".pdf":
-                result = {"file": str(path), "ok": False, "error": "not a PDF file"}
+            if not path.is_file() or not _is_supported_input(path):
+                result = {"file": str(path), "ok": False, "error": "not a supported PDF or image file"}
                 results.append(result)
                 failed += 1
-                print(f"Skipping non-PDF input: {path}", file=log, flush=True)
+                print(f"Skipping unsupported input: {path}", file=log, flush=True)
                 continue
 
             print(f"Starting OCR: {path}", file=log, flush=True)
