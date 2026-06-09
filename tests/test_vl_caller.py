@@ -165,6 +165,18 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(api_url, "https://example.com/layout-parsing")
         self.assertEqual(api_source, "local-config")
 
+    def test_get_doc_parsing_model_defaults_to_vl_16(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(lib.get_doc_parsing_model(), "PaddleOCR-VL-1.6")
+
+    def test_get_doc_parsing_model_can_be_overridden(self):
+        with mock.patch.dict(
+            os.environ,
+            {"PADDLEOCR_DOC_PARSING_MODEL": "PaddleOCR-VL-1.5"},
+            clear=True,
+        ):
+            self.assertEqual(lib.get_doc_parsing_model(), "PaddleOCR-VL-1.5")
+
     def test_get_config_errors_when_no_env_or_keychain_token(self):
         with mock.patch.dict(
             os.environ,
@@ -214,6 +226,56 @@ class ApiRequestTests(unittest.TestCase):
         timeout = client.post.call_args.kwargs["timeout"]
         self.assertEqual(timeout.read, 120)
         self.assertEqual(timeout.connect, 7)
+
+    def test_parse_document_sends_default_vl_16_model(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "scan.png"
+            image_path.write_bytes(b"\x89PNG\r\n\x1a\nsample\n")
+
+            with mock.patch.dict(os.environ, {}, clear=True):
+                with mock.patch("lib._make_api_request") as request_mock:
+                    request_mock.return_value = {
+                        "errorCode": 0,
+                        "result": {
+                            "layoutParsingResults": [
+                                {"markdown": {"text": "converted"}}
+                            ]
+                        },
+                    }
+                    result = lib.parse_document(
+                        file_path=str(image_path),
+                        api_url="https://example.com/layout-parsing",
+                        token="token",
+                    )
+
+        self.assertTrue(result["ok"])
+        params = request_mock.call_args.args[2]
+        self.assertEqual(params["model"], "PaddleOCR-VL-1.6")
+
+    def test_parse_document_allows_explicit_model_override(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "scan.png"
+            image_path.write_bytes(b"\x89PNG\r\n\x1a\nsample\n")
+
+            with mock.patch("lib._make_api_request") as request_mock:
+                request_mock.return_value = {
+                    "errorCode": 0,
+                    "result": {
+                        "layoutParsingResults": [
+                            {"markdown": {"text": "converted"}}
+                        ]
+                    },
+                }
+                result = lib.parse_document(
+                    file_path=str(image_path),
+                    api_url="https://example.com/layout-parsing",
+                    token="token",
+                    model="PaddleOCR-VL-1.5",
+                )
+
+        self.assertTrue(result["ok"])
+        params = request_mock.call_args.args[2]
+        self.assertEqual(params["model"], "PaddleOCR-VL-1.5")
 
 
 class QuickActionTests(unittest.TestCase):
@@ -354,6 +416,19 @@ class QuickActionTests(unittest.TestCase):
 
             self.assertTrue((runtime_dir / "split_pdf.py").is_file())
             self.assertEqual(runner_path, runtime_dir / "run_quick_action.sh")
+
+    def test_installer_writes_model_to_local_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.env"
+            with mock.patch.object(install_quick_action, "DEFAULT_CONFIG_PATH", config_path):
+                install_quick_action.write_config(
+                    "https://example.com/layout-parsing",
+                    "120",
+                    "PaddleOCR-VL-1.6",
+                )
+
+            content = config_path.read_text(encoding="utf-8")
+            self.assertIn("PADDLEOCR_DOC_PARSING_MODEL=PaddleOCR-VL-1.6", content)
 
 
 class MergeChunkResultsTests(unittest.TestCase):

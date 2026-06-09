@@ -42,6 +42,7 @@ DEFAULT_CONNECT_TIMEOUT = 30  # seconds
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_RETRY_BACKOFF = 1.5
 DEFAULT_LARGE_FILE_WARNING_MB = 50
+DEFAULT_MODEL = "PaddleOCR-VL-1.6"
 API_GUIDE_URL = "https://paddleocr.com"
 FILE_TYPE_PDF = 0
 FILE_TYPE_IMAGE = 1
@@ -243,6 +244,11 @@ def get_config() -> tuple[str, str]:
     """
     api_url, token, _, _ = get_config_with_sources()
     return api_url, token
+
+
+def get_doc_parsing_model() -> str:
+    """Return the PaddleOCR official API model name."""
+    return _get_setting("PADDLEOCR_DOC_PARSING_MODEL") or DEFAULT_MODEL
 
 
 # =============================================================================
@@ -494,6 +500,7 @@ def parse_document(
             }
 
         params.update(options)
+        params.setdefault("model", get_doc_parsing_model())
         if resolved_file_type is not None:
             params["fileType"] = resolved_file_type
         elif file_url:

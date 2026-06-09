@@ -11,7 +11,12 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from lib import DEFAULT_CONFIG_PATH, DEFAULT_KEYCHAIN_ACCOUNT, DEFAULT_KEYCHAIN_SERVICE
+from lib import (
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_KEYCHAIN_ACCOUNT,
+    DEFAULT_KEYCHAIN_SERVICE,
+    DEFAULT_MODEL,
+)
 
 
 WORKFLOW_NAME = "转为 Markdown (OCR)"
@@ -32,10 +37,12 @@ RUNTIME_FILES = (
 WORKFLOW_FILE_TYPES = ["com.adobe.pdf", "public.image"]
 
 
-def write_config(api_url: str, timeout: Optional[str]) -> Path:
+def write_config(api_url: str, timeout: Optional[str], model: str = DEFAULT_MODEL) -> Path:
     if not api_url.rstrip("/").endswith("/layout-parsing"):
         raise ValueError("API URL must end with /layout-parsing")
     lines = [f"PADDLEOCR_DOC_PARSING_API_URL={api_url}"]
+    if model:
+        lines.append(f"PADDLEOCR_DOC_PARSING_MODEL={model}")
     if timeout:
         lines.append(f"PADDLEOCR_DOC_PARSING_TIMEOUT={timeout}")
     DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -146,6 +153,11 @@ def main() -> int:
         help="Optional API timeout written to local config",
     )
     parser.add_argument(
+        "--model",
+        default=os.getenv("PADDLEOCR_DOC_PARSING_MODEL", DEFAULT_MODEL),
+        help=f"PaddleOCR official API model; defaults to {DEFAULT_MODEL}",
+    )
+    parser.add_argument(
         "--store-env-token",
         action="store_true",
         help="Store PADDLEOCR_ACCESS_TOKEN from the current environment in macOS Keychain",
@@ -157,7 +169,7 @@ def main() -> int:
     if not args.api_url:
         parser.error("Provide --api-url or set PADDLEOCR_DOC_PARSING_API_URL")
 
-    config_path = write_config(args.api_url, args.timeout or None)
+    config_path = write_config(args.api_url, args.timeout or None, args.model)
     if args.store_env_token:
         token = os.getenv("PADDLEOCR_ACCESS_TOKEN", "").strip()
         if not token:

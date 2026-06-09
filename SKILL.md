@@ -135,6 +135,7 @@ Required environment variables:
 
 - `PADDLEOCR_DOC_PARSING_API_URL` or local Finder config `~/.config/pdf-to-md/config.env`
 - `PADDLEOCR_ACCESS_TOKEN` or macOS Keychain item `service=pdf-to-md.paddleocr`, `account=PADDLEOCR_ACCESS_TOKEN`
+- optional: `PADDLEOCR_DOC_PARSING_MODEL`, defaults to `PaddleOCR-VL-1.6`
 - optional: `PADDLEOCR_DOC_PARSING_TIMEOUT`
 
 Do not paste live credentials into tracked files.

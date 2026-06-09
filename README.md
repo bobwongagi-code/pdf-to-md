@@ -20,6 +20,7 @@ pip install -r scripts/requirements.txt
 ```bash
 export PADDLEOCR_DOC_PARSING_API_URL="https://your-endpoint/layout-parsing"
 export PADDLEOCR_ACCESS_TOKEN="your-token"
+export PADDLEOCR_DOC_PARSING_MODEL="PaddleOCR-VL-1.6"
 export PADDLEOCR_DOC_PARSING_TIMEOUT="120"
 ```
 
@@ -27,6 +28,7 @@ On macOS, prefer storing the access token in Keychain instead of shell config:
 
 ```bash
 export PADDLEOCR_DOC_PARSING_API_URL="https://your-endpoint/layout-parsing"
+export PADDLEOCR_DOC_PARSING_MODEL="PaddleOCR-VL-1.6"
 security add-generic-password \
   -s "pdf-to-md.paddleocr" \
   -a "PADDLEOCR_ACCESS_TOKEN" \
@@ -101,8 +103,10 @@ python scripts/pdf_to_md.py "/path/file.pdf" --chunk-pages 25 --chunk-workers 1 
 ## Behavior
 
 - PaddleOCR Document Parsing is the primary conversion path
+- PaddleOCR official API requests default to `model=PaddleOCR-VL-1.6`
 - `PADDLEOCR_ACCESS_TOKEN` is read from the environment first, then macOS Keychain
 - `PADDLEOCR_DOC_PARSING_API_URL` is read from the environment first, then `~/.config/pdf-to-md/config.env` for Finder execution
+- `PADDLEOCR_DOC_PARSING_MODEL` can override the official API model name
 - Local images use PaddleOCR image parsing and write same-name Markdown by default
 - Local PDFs over 20 pages are automatically split and merged
 - Large local PDFs default to 20-page chunks and one worker for API stability

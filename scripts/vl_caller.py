@@ -52,7 +52,13 @@ if not logging.getLogger().handlers:
 # Add scripts dir to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib import FILE_TYPE_IMAGE, FILE_TYPE_PDF, parse_document, _metric_add as metric_add
+from lib import (
+    FILE_TYPE_IMAGE,
+    FILE_TYPE_PDF,
+    get_doc_parsing_model,
+    parse_document,
+    _metric_add as metric_add,
+)
 from split_pdf import get_pdf_page_count, split_pdf
 
 __version__ = "2.0.9"
@@ -671,6 +677,7 @@ Configuration:
     total_started_at = time.perf_counter()
     cache_dir = resolve_cache_dir(args.cache_dir)
     parse_options = {
+        "model": get_doc_parsing_model(),
         "useDocUnwarping": bool(args.doc_unwarping),
         "useDocOrientationClassify": bool(args.orientation_classify),
         "visualize": False,
