@@ -1,584 +1,87 @@
-# Copyright (c) 2025 PaddlePaddle Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""Compatibility exports for the split OCR client modules.
 
-"""
-PaddleOCR Document Parsing Library
-
-Simple document parsing API wrapper for PaddleOCR.
+The command-line entry points historically imported the lib module directly.
+Keep this small facade so those callers can migrate independently while the
+implementation lives in cohesive modules.
 """
 
-import base64
-import logging
-import os
-import shutil
-import subprocess
-import sys
-import time
-from pathlib import Path
-from typing import Any, Optional
-from urllib.parse import urlparse, unquote
-
-import httpx
-
-logger = logging.getLogger(__name__)
-
-# =============================================================================
-# Constants
-# =============================================================================
-
-DEFAULT_TIMEOUT = 600  # seconds (10 minutes)
-DEFAULT_CONNECT_TIMEOUT = 30  # seconds
-DEFAULT_MAX_RETRIES = 2
-DEFAULT_RETRY_BACKOFF = 1.5
-DEFAULT_LARGE_FILE_WARNING_MB = 50
-DEFAULT_MODEL = "PaddleOCR-VL-1.6"
-API_GUIDE_URL = "https://paddleocr.com"
-FILE_TYPE_PDF = 0
-FILE_TYPE_IMAGE = 1
-IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp")
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / "pdf-to-md" / "config.env"
-DEFAULT_KEYCHAIN_SERVICE = "pdf-to-md.paddleocr"
-DEFAULT_KEYCHAIN_ACCOUNT = "PADDLEOCR_ACCESS_TOKEN"
-
-
-def _metric_add(metrics: Optional[dict[str, float]], key: str, delta: float) -> None:
-    if metrics is None:
-        return
-    metrics[key] = metrics.get(key, 0.0) + delta
-
-
-# =============================================================================
-# Environment
-# =============================================================================
-
-
-def _get_env(key: str, *fallback_keys: str) -> str:
-    """Get environment variable with fallback keys."""
-    value = os.getenv(key, "").strip()
-    if value:
-        return value
-    for fallback in fallback_keys:
-        value = os.getenv(fallback, "").strip()
-        if value:
-            logger.debug(f"Using fallback env var: {fallback}")
-            return value
-    return ""
-
-
-def _get_local_config(key: str) -> str:
-    """Read non-secret settings for Finder Quick Action executions."""
-    config_path = Path(
-        _get_env("PDF_TO_MD_CONFIG_FILE") or DEFAULT_CONFIG_PATH
-    ).expanduser()
-    if not config_path.is_file():
-        return ""
-    try:
-        for raw_line in config_path.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            setting_key, value = line.split("=", 1)
-            if setting_key.strip() == key:
-                return value.strip().strip('"').strip("'")
-    except OSError as e:
-        logger.debug("Failed to read local config %s: %s", config_path, e)
-    return ""
-
-
-def _get_setting(key: str) -> str:
-    """Read a non-secret setting from the environment, then local config."""
-    return _get_env(key) or _get_local_config(key)
-
-
-def _keychain_enabled() -> bool:
-    return _get_env("PADDLEOCR_DISABLE_KEYCHAIN").lower() not in {
-        "1",
-        "true",
-        "yes",
-    }
-
-
-def _get_keychain_secret(service: str, account: str) -> str:
-    """Read a secret from macOS Keychain using the built-in security CLI."""
-    if sys.platform != "darwin" or not _keychain_enabled():
-        return ""
-    security_bin = shutil.which("security")
-    if not security_bin:
-        return ""
-    try:
-        result = subprocess.run(
-            [
-                security_bin,
-                "find-generic-password",
-                "-s",
-                service,
-                "-a",
-                account,
-                "-w",
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        logger.debug("Keychain lookup failed: %s", e)
-        return ""
-    if result.returncode != 0:
-        return ""
-    return result.stdout.strip()
-
-
-def _get_access_token() -> tuple[str, str]:
-    token = _get_env("PADDLEOCR_ACCESS_TOKEN")
-    if token:
-        return token, "environment"
-
-    service = _get_env("PADDLEOCR_KEYCHAIN_SERVICE") or DEFAULT_KEYCHAIN_SERVICE
-    account = _get_env("PADDLEOCR_KEYCHAIN_ACCOUNT") or DEFAULT_KEYCHAIN_ACCOUNT
-    token = _get_keychain_secret(service, account)
-    if token:
-        return token, f"keychain:{service}/{account}"
-
-    return "", ""
-
-
-def _get_float_env(key: str, default: float, min_value: float) -> float:
-    """Read a positive float env var with fallback to default."""
-    raw_value = _get_setting(key)
-    if not raw_value:
-        return default
-    try:
-        value = float(raw_value)
-    except ValueError:
-        logger.warning("Invalid %s=%r; using default %s", key, raw_value, default)
-        return default
-    if value < min_value:
-        logger.warning(
-            "Invalid %s=%r; must be >= %s. Using default %s",
-            key,
-            raw_value,
-            min_value,
-            default,
-        )
-        return default
-    return value
-
-
-def _get_int_env(key: str, default: int, min_value: int) -> int:
-    """Read an integer env var with fallback to default."""
-    raw_value = _get_setting(key)
-    if not raw_value:
-        return default
-    try:
-        value = int(raw_value)
-    except ValueError:
-        logger.warning("Invalid %s=%r; using default %s", key, raw_value, default)
-        return default
-    if value < min_value:
-        logger.warning(
-            "Invalid %s=%r; must be >= %s. Using default %s",
-            key,
-            raw_value,
-            min_value,
-            default,
-        )
-        return default
-    return value
-
-
-def get_config_with_sources() -> tuple[str, str, str, str]:
-    """
-    Get API URL and token from environment or macOS Keychain.
-
-    Returns:
-        tuple of (api_url, token, api_url_source, token_source)
-
-    Raises:
-        ValueError: If not configured
-    """
-    api_url = _get_setting("PADDLEOCR_DOC_PARSING_API_URL")
-    token, token_source = _get_access_token()
-
-    if not api_url:
-        raise ValueError(
-            f"PADDLEOCR_DOC_PARSING_API_URL not configured. Get your API at: {API_GUIDE_URL}"
-        )
-    if not token:
-        raise ValueError(
-            "PADDLEOCR_ACCESS_TOKEN not configured in environment or macOS Keychain. "
-            f"Get your API at: {API_GUIDE_URL}"
-        )
-
-    # Normalize URL
-    if not api_url.startswith(("http://", "https://")):
-        api_url = f"https://{api_url}"
-    api_path = urlparse(api_url).path.rstrip("/")
-    if not api_path.endswith("/layout-parsing"):
-        raise ValueError(
-            "PADDLEOCR_DOC_PARSING_API_URL must be a full endpoint ending with "
-            "/layout-parsing. "
-            "Example: https://your-service.paddleocr.com/layout-parsing"
-        )
-
-    api_url_source = (
-        "environment" if _get_env("PADDLEOCR_DOC_PARSING_API_URL") else "local-config"
-    )
-    return api_url, token, api_url_source, token_source
-
-
-def get_config() -> tuple[str, str]:
-    """
-    Get API URL and token while preserving the existing public return shape.
-    """
-    api_url, token, _, _ = get_config_with_sources()
-    return api_url, token
-
-
-def get_doc_parsing_model() -> str:
-    """Return the PaddleOCR official API model name."""
-    return _get_setting("PADDLEOCR_DOC_PARSING_MODEL") or DEFAULT_MODEL
-
-
-# =============================================================================
-# File Utilities
-# =============================================================================
-
-
-def _detect_file_type(path_or_url: str) -> int:
-    """Detect file type: 0=PDF, 1=Image."""
-    path = path_or_url.lower()
-    if path.startswith(("http://", "https://")):
-        path = unquote(urlparse(path).path)
-
-    if path.endswith(".pdf"):
-        return FILE_TYPE_PDF
-    elif path.endswith(IMAGE_EXTENSIONS):
-        return FILE_TYPE_IMAGE
-    else:
-        raise ValueError(f"Unsupported file format: {path_or_url}")
-
-
-def _load_file_as_base64(file_path: str) -> str:
-    """Load local file and encode as base64."""
-    path = Path(file_path).expanduser()
-    if not path.exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
-    if not path.is_file():
-        raise ValueError(f"Not a file: {file_path}")
-    stat = path.stat()
-    if stat.st_size <= 0:
-        raise ValueError(f"File is empty: {file_path}")
-    warning_threshold_mb = _get_float_env(
-        "PADDLEOCR_DOC_PARSING_LARGE_FILE_WARNING_MB",
-        DEFAULT_LARGE_FILE_WARNING_MB,
-        min_value=1,
-    )
-    warning_threshold_bytes = int(warning_threshold_mb * 1024 * 1024)
-    if stat.st_size >= warning_threshold_bytes:
-        logger.warning(
-            "Large local file detected (%.1f MB): %s. Prefer --file-url when possible "
-            "to avoid base64 overhead.",
-            stat.st_size / 1024 / 1024,
-            file_path,
-        )
-
-    with path.open("rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
-
-
-# =============================================================================
-# API Request
-# =============================================================================
-
-
-def _make_api_request(
-    api_url: str,
-    token: str,
-    params: dict,
-    client: Optional[httpx.Client] = None,
-    metrics: Optional[dict[str, float]] = None,
-) -> dict:
-    """
-    Make PaddleOCR document parsing API request.
-
-    Args:
-        api_url: API endpoint URL
-        token: Access token
-        params: Request parameters
-
-    Returns:
-        API response dict
-
-    Raises:
-        RuntimeError: On API errors
-    """
-    headers = {
-        "Authorization": f"token {token}",
-        "Content-Type": "application/json",
-        "Client-Platform": "official-skill",
-    }
-
-    timeout_seconds = _get_float_env(
-        "PADDLEOCR_DOC_PARSING_TIMEOUT", DEFAULT_TIMEOUT, min_value=1
-    )
-    connect_timeout_seconds = _get_float_env(
-        "PADDLEOCR_DOC_PARSING_CONNECT_TIMEOUT",
-        DEFAULT_CONNECT_TIMEOUT,
-        min_value=1,
-    )
-    max_retries = _get_int_env(
-        "PADDLEOCR_DOC_PARSING_MAX_RETRIES", DEFAULT_MAX_RETRIES, min_value=0
-    )
-    retry_backoff_seconds = _get_float_env(
-        "PADDLEOCR_DOC_PARSING_RETRY_BACKOFF", DEFAULT_RETRY_BACKOFF, min_value=0.1
-    )
-    timeout = httpx.Timeout(
-        timeout_seconds,
-        connect=connect_timeout_seconds,
-    )
-    owned_client = client is None
-    if owned_client:
-        client = httpx.Client(timeout=timeout, follow_redirects=True)
-    resp = None
-    request_started_at = time.perf_counter()
-    try:
-        for attempt in range(max_retries + 1):
-            try:
-                # Pass timeout per request so callers that reuse a client cannot
-                # accidentally bypass the configured OCR timeout policy.
-                resp = client.post(
-                    api_url,
-                    json=params,
-                    headers=headers,
-                    timeout=timeout,
-                )
-            except httpx.TimeoutException:
-                error_message = f"API request timed out after {timeout_seconds}s"
-                should_retry = True
-            except httpx.RequestError as e:
-                error_message = f"API request failed: {e}"
-                should_retry = True
-            else:
-                if resp.status_code == 200:
-                    break
-
-                error_detail = ""
-                try:
-                    error_body = resp.json()
-                    if isinstance(error_body, dict):
-                        error_detail = str(error_body.get("errorMsg", "")).strip()
-                except Exception:
-                    pass
-
-                if not error_detail:
-                    error_detail = (resp.text[:200] or "No response body").strip()
-
-                if resp.status_code == 403:
-                    raise RuntimeError(f"Authentication failed (403): {error_detail}")
-
-                error_message = (
-                    f"API rate limit exceeded (429): {error_detail}"
-                    if resp.status_code == 429
-                    else (
-                        f"API service error ({resp.status_code}): {error_detail}"
-                        if resp.status_code >= 500
-                        else f"API error ({resp.status_code}): {error_detail}"
-                    )
-                )
-                should_retry = resp.status_code == 429 or resp.status_code >= 500
-
-            if attempt >= max_retries or not should_retry:
-                raise RuntimeError(error_message)
-
-            sleep_seconds = retry_backoff_seconds * (2**attempt)
-            logger.warning(
-                "PaddleOCR HTTP attempt %s/%s failed: %s. Retrying in %.1fs",
-                attempt + 1,
-                max_retries + 1,
-                error_message,
-                sleep_seconds,
-            )
-            time.sleep(sleep_seconds)
-    finally:
-        _metric_add(metrics, "api_request_seconds", time.perf_counter() - request_started_at)
-        if owned_client:
-            client.close()
-
-    # Parse response
-    try:
-        result = resp.json()
-    except Exception:
-        raise RuntimeError(f"Invalid JSON response: {resp.text[:200]}")
-
-    # Check API-level error
-    if result.get("errorCode", 0) != 0:
-        raise RuntimeError(f"API error: {result.get('errorMsg', 'Unknown error')}")
-
-    return result
-
-
-# =============================================================================
-# Main API
-# =============================================================================
-
-
-def parse_document(
-    file_path: Optional[str] = None,
-    file_url: Optional[str] = None,
-    file_type: Optional[int] = None,
-    api_url: Optional[str] = None,
-    token: Optional[str] = None,
-    client: Optional[httpx.Client] = None,
-    metrics: Optional[dict[str, float]] = None,
-    **options,
-) -> dict[str, Any]:
-    """
-    Parse document with PaddleOCR.
-
-    Args:
-        file_path: Local file path
-        file_url: URL to file
-        file_type: Optional file type override (0=PDF, 1=Image)
-        **options: Additional API options
-
-    Returns:
-        {
-            "ok": True,
-            "text": "extracted text...",
-            "result": { raw API result },
-            "error": None
-        }
-        or on error:
-        {
-            "ok": False,
-            "text": "",
-            "result": None,
-            "error": {"code": "...", "message": "..."}
-        }
-    """
-    # Validate input
-    if not file_path and not file_url:
-        return _error("INPUT_ERROR", "file_path or file_url required")
-    if file_type is not None and file_type not in (FILE_TYPE_PDF, FILE_TYPE_IMAGE):
-        return _error("INPUT_ERROR", "file_type must be 0 (PDF) or 1 (Image)")
-
-    # Get config
-    if not api_url or not token:
-        config_started_at = time.perf_counter()
-        try:
-            api_url, token = get_config()
-        except ValueError as e:
-            return _error("CONFIG_ERROR", str(e))
-        finally:
-            _metric_add(metrics, "config_lookup_seconds", time.perf_counter() - config_started_at)
-
-    # Build request params
-    input_prepare_started_at = time.perf_counter()
-    try:
-        resolved_file_type: Optional[int] = None
-        if file_url:
-            params = {"file": file_url}
-            resolved_file_type = file_type
-        else:
-            resolved_file_type = (
-                file_type if file_type is not None else _detect_file_type(file_path)
-            )
-            params = {
-                "file": _load_file_as_base64(file_path),
-            }
-
-        params.update(options)
-        params.setdefault("model", get_doc_parsing_model())
-        if resolved_file_type is not None:
-            params["fileType"] = resolved_file_type
-        elif file_url:
-            params.pop("fileType", None)
-
-    except (ValueError, FileNotFoundError) as e:
-        return _error("INPUT_ERROR", str(e))
-    finally:
-        _metric_add(metrics, "input_prepare_seconds", time.perf_counter() - input_prepare_started_at)
-
-    # Call API
-    try:
-        result = _make_api_request(api_url, token, params, client=client, metrics=metrics)
-    except RuntimeError as e:
-        return _error("API_ERROR", str(e))
-
-    # Extract text
-    extract_started_at = time.perf_counter()
-    try:
-        text = _extract_text(result)
-    except ValueError as e:
-        return _error("API_ERROR", str(e))
-    finally:
-        _metric_add(metrics, "text_extract_seconds", time.perf_counter() - extract_started_at)
-
-    return {
-        "ok": True,
-        "text": text,
-        "result": result,
-        "error": None,
-    }
-
-
-def _extract_text(result) -> str:
-    """Extract text from document parsing result."""
-    if not isinstance(result, dict):
-        raise ValueError(
-            "Invalid response schema: top-level response must be an object"
-        )
-
-    raw_result = result.get("result")
-    if not isinstance(raw_result, dict):
-        raise ValueError("Invalid response schema: missing result object")
-
-    pages = raw_result.get("layoutParsingResults")
-    if not isinstance(pages, list):
-        raise ValueError(
-            "Invalid response schema: result.layoutParsingResults must be an array"
-        )
-
-    texts = []
-    for i, page in enumerate(pages):
-        if not isinstance(page, dict):
-            raise ValueError(
-                f"Invalid response schema: result.layoutParsingResults[{i}] must be an object"
-            )
-
-        markdown = page.get("markdown")
-        if not isinstance(markdown, dict):
-            raise ValueError(
-                f"Invalid response schema: result.layoutParsingResults[{i}].markdown must be an object"
-            )
-
-        text = markdown.get("text")
-        if not isinstance(text, str):
-            raise ValueError(
-                f"Invalid response schema: result.layoutParsingResults[{i}].markdown.text must be a string"
-            )
-        texts.append(text)
-
-    return "\n\n".join(texts)
-
-
-def _error(code: str, message: str) -> dict:
-    """Create error response."""
-    return {
-        "ok": False,
-        "text": "",
-        "result": None,
-        "error": {"code": code, "message": message},
-    }
+from config import (
+    API_GUIDE_URL,
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_KEYCHAIN_ACCOUNT,
+    DEFAULT_KEYCHAIN_SERVICE,
+    DEFAULT_LARGE_FILE_WARNING_MB,
+    DEFAULT_MAX_LOCAL_FILE_MB,
+    DEFAULT_MAX_REQUEST_MB,
+    DEFAULT_MAX_RESPONSE_MB,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_RETRY_BACKOFF,
+    DEFAULT_CACHE_MAX_MB,
+    DEFAULT_CACHE_TTL_SECONDS,
+    DEFAULT_MAX_CHUNK_WORKERS,
+    DEFAULT_MAX_PAGES_PER_REQUEST,
+    LOCAL_CONFIG_KEYS,
+    DEFAULT_MODEL,
+    DEFAULT_TASK_TIMEOUT,
+    DEFAULT_TIMEOUT,
+    FILE_TYPE_IMAGE,
+    FILE_TYPE_PDF,
+    IMAGE_EXTENSIONS,
+    MAX_LOCAL_FILE_BYTES,
+    MAX_REQUEST_BYTES,
+    MAX_RESPONSE_BYTES,
+    MAX_RETRY_AFTER_SECONDS,
+    MAX_TASK_TIMEOUT,
+    MAX_CACHE_MAX_MB,
+    MAX_CHUNK_WORKERS,
+    SUPPORTED_FILE_TYPES,
+    _get_access_token,
+    _get_env,
+    _get_float_env,
+    _get_int_env,
+    _get_keychain_secret,
+    _get_local_config,
+    _get_setting,
+    _keychain_enabled,
+    _metric_add,
+    read_local_config_values,
+    get_config,
+    get_config_with_sources,
+    get_credential_scope_hash,
+    get_cache_max_bytes,
+    get_cache_ttl_seconds,
+    get_doc_parsing_model,
+    get_endpoint_origin,
+    get_max_chunk_workers,
+    get_max_pages_per_request,
+    get_task_timeout_seconds,
+    get_asset_total_timeout_seconds,
+    get_max_asset_count,
+    get_max_asset_total_bytes,
+    metric_add,
+    resolve_access_token,
+    resolve_api_url,
+)
+from input_files import (
+    _detect_file_type,
+    _load_file_as_base64,
+    _magic_matches_file_type,
+)
+from ocr_client import (
+    _bounded_post,
+    _make_api_request,
+    _redact_secret,
+    _retry_sleep_seconds,
+    json_dumps_stable,
+    parse_document,
+)
+from response_parser import (
+    _error,
+    _extract_markdown_assets,
+    _extract_text,
+    _is_explicit_blank_page,
+    _page_identifier,
+    _validate_page_coverage,
+    error_result,
+)

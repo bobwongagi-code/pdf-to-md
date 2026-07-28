@@ -25,13 +25,25 @@ Usage:
 """
 
 import argparse
+import math
+import os
 import sys
+import tempfile
 from pathlib import Path
+
+from safe_io import OutputPathError, atomic_replace, reject_collisions
+
+MAX_TARGET_SIZE_MB = 2048
 
 
 def optimize_image(
-    input_path: Path, output_path: Path, quality: int = 85, max_size_mb: float = 20
-):
+    input_path: Path,
+    output_path: Path,
+    quality: int = 85,
+    max_size_mb: float = 20,
+    *,
+    force: bool = False,
+) -> Path:
     """
     Optimize image file by reducing quality and/or resolution
 
@@ -48,25 +60,56 @@ def optimize_image(
         print("Install with: pip install Pillow")
         sys.exit(1)
 
+    if not 1 <= quality <= 100:
+        raise ValueError("quality must be between 1 and 100")
+    if (
+        not math.isfinite(max_size_mb)
+        or not 0 < max_size_mb <= MAX_TARGET_SIZE_MB
+    ):
+        raise ValueError(
+            f"target size must be between 0 and {MAX_TARGET_SIZE_MB} MB"
+        )
+
+    input_path = input_path.expanduser()
+    if input_path.is_symlink() and os.getenv("PADDLEOCR_ALLOW_SYMLINKS", "").lower() not in {
+        "1",
+        "true",
+        "yes",
+    }:
+        raise ValueError("Symbolic-link image inputs are disabled by default")
+    if not input_path.is_file():
+        raise ValueError(f"Input image is not a regular file: {input_path}")
+
     print(f"Optimizing image: {input_path}")
 
-    # Open image
-    img = Image.open(input_path)
+    output_path = reject_collisions(
+        output_path,
+        [input_path],
+        force=force,
+        label="image output",
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_fd, temp_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.", suffix=".tmp", dir=str(output_path.parent)
+    )
+    os.close(temp_fd)
+    temp_path = Path(temp_name)
+
+    try:
+        source_img = Image.open(input_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    img = source_img
+    if getattr(source_img, "is_animated", False) or getattr(source_img, "n_frames", 1) > 1:
+        source_img.close()
+        temp_path.unlink(missing_ok=True)
+        raise ValueError("Multi-frame images are not supported by optimize_file.py")
     original_size = input_path.stat().st_size / 1024 / 1024
 
     print(f"Original size: {original_size:.2f}MB")
     print(f"Original dimensions: {img.size[0]}x{img.size[1]}")
-
-    # Convert RGBA to RGB if needed (for JPEG)
-    if img.mode in ("RGBA", "LA", "P"):
-        # Create white background
-        background = Image.new("RGB", img.size, (255, 255, 255))
-        if img.mode == "P":
-            img = img.convert("RGBA")
-        background.paste(
-            img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None
-        )
-        img = background
 
     # Determine output format
     output_format = output_path.suffix.lower()
@@ -74,37 +117,60 @@ def optimize_image(
         save_format = "JPEG"
     elif output_format == ".png":
         save_format = "PNG"
+    elif output_format in [".tif", ".tiff"]:
+        save_format = "TIFF"
+    elif output_format == ".bmp":
+        save_format = "BMP"
     else:
-        save_format = "JPEG"
-        output_path = output_path.with_suffix(".jpg")
+        img.close()
+        temp_path.unlink(missing_ok=True)
+        raise ValueError(f"Unsupported output image format: {output_path.suffix}")
+
+    # JPEG cannot store alpha or palette transparency; other formats keep the source mode.
+    if save_format == "JPEG" and img.mode in ("RGBA", "LA", "P"):
+        converted = Image.new("RGB", img.size, (255, 255, 255))
+        rgba = img.convert("RGBA")
+        converted.paste(rgba, mask=rgba.getchannel("A"))
+        rgba.close()
+        img = converted
 
     # Try saving with specified quality
-    img.save(output_path, format=save_format, quality=quality, optimize=True)
-    new_size = output_path.stat().st_size / 1024 / 1024
+    try:
+        img.save(temp_path, format=save_format, quality=quality, optimize=True)
+        new_size = temp_path.stat().st_size / 1024 / 1024
 
-    # If still too large, reduce resolution.
-    for step in range(1, 8):
-        if new_size <= max_size_mb:
-            break
-        scale_factor = 1.0 - step * 0.1
-        new_width = int(img.size[0] * scale_factor)
-        new_height = int(img.size[1] * scale_factor)
+        # If still too large, reduce resolution.
+        for step in range(1, 8):
+            if new_size <= max_size_mb:
+                break
+            scale_factor = 1.0 - step * 0.1
+            new_width = max(1, int(img.size[0] * scale_factor))
+            new_height = max(1, int(img.size[1] * scale_factor))
 
-        print(f"Resizing to {new_width}x{new_height} (scale: {scale_factor:.2f})")
+            print(f"Resizing to {new_width}x{new_height} (scale: {scale_factor:.2f})")
 
-        resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        resized.save(output_path, format=save_format, quality=quality, optimize=True)
-        new_size = output_path.stat().st_size / 1024 / 1024
+            resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            try:
+                resized.save(temp_path, format=save_format, quality=quality, optimize=True)
+                new_size = temp_path.stat().st_size / 1024 / 1024
+            finally:
+                resized.close()
 
-    print(f"Optimized size: {new_size:.2f}MB")
-    print(f"Reduction: {((original_size - new_size) / original_size * 100):.1f}%")
+        print(f"Optimized size: {new_size:.2f}MB")
+        print(f"Reduction: {((original_size - new_size) / original_size * 100):.1f}%")
 
-    if new_size > max_size_mb:
-        print(f"\nWARNING: File still larger than {max_size_mb}MB")
-        print("Consider:")
-        print("  - Lower quality (--quality 70)")
-        print("  - Use --file-url instead of local file")
-        print("  - Use a smaller or resized image")
+        if new_size > max_size_mb:
+            raise RuntimeError(
+                f"Optimized file is still larger than target {max_size_mb}MB: {new_size:.2f}MB"
+            )
+        with temp_path.open("rb") as prepared:
+            os.fsync(prepared.fileno())
+        return atomic_replace(temp_path, output_path, force=force)
+    finally:
+        img.close()
+        if img is not source_img:
+            source_img.close()
+        temp_path.unlink(missing_ok=True)
 
 
 def main():
@@ -133,8 +199,9 @@ Supported formats:
         "--target-size",
         type=float,
         default=20,
-        help="Target maximum size in MB (default: 20)",
+        help=f"Target maximum size in MB (default: 20, max: {MAX_TARGET_SIZE_MB})",
     )
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output image")
 
     args = parser.parse_args()
 
@@ -150,7 +217,17 @@ Supported formats:
     ext = input_path.suffix.lower()
 
     if ext in [".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"]:
-        optimize_image(input_path, output_path, args.quality, args.target_size)
+        try:
+            output_path = optimize_image(
+                input_path,
+                output_path,
+                args.quality,
+                args.target_size,
+                force=args.force,
+            )
+        except (ValueError, RuntimeError, OutputPathError, OSError) as e:
+            print(f"ERROR: {e}")
+            sys.exit(1)
     elif ext == ".pdf":
         print("ERROR: PDF optimization is not supported by optimize_file.py")
         print("Use one of these instead:")

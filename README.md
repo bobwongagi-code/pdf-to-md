@@ -24,16 +24,12 @@ export PADDLEOCR_DOC_PARSING_MODEL="PaddleOCR-VL-1.6"
 export PADDLEOCR_DOC_PARSING_TIMEOUT="120"
 ```
 
-On macOS, prefer storing the access token in Keychain instead of shell config:
+On macOS, prefer the installer prompt for Keychain storage:
 
 ```bash
 export PADDLEOCR_DOC_PARSING_API_URL="https://your-endpoint/layout-parsing"
 export PADDLEOCR_DOC_PARSING_MODEL="PaddleOCR-VL-1.6"
-security add-generic-password \
-  -s "pdf-to-md.paddleocr" \
-  -a "PADDLEOCR_ACCESS_TOKEN" \
-  -w "your-token" \
-  -U
+python scripts/install_quick_action.py --store-token
 ```
 
 3. Run a quick check:
@@ -51,34 +47,37 @@ python scripts/pdf_to_md.py "/absolute/path/to/scan.png" --pretty
 
 This writes:
 
-- a same-name Markdown file beside the source PDF or image
-- a JSON result file for debugging, with the saved path printed to stderr
+- a Markdown file beside the source PDF or image, named with the original extension
+  preserved, for example `document.pdf.md` or `scan.png.md`
+- image resources in a sibling `.assets` directory when the provider returns them
+- raw JSON only when `--output` or `--keep-raw` is explicitly requested
 
 ## Finder Quick Action
 
 On macOS, install the Finder right-click action once:
 
 ```bash
-python scripts/install_quick_action.py --store-env-token
+python scripts/install_quick_action.py --store-token
 ```
 
 The installer:
 
 - installs `转为 Markdown (OCR)` in Finder Quick Actions
 - writes non-secret endpoint settings to `~/.config/pdf-to-md/config.env`
-- stores the current `PADDLEOCR_ACCESS_TOKEN` in Keychain when `--store-env-token` is used
+- records and preflights the Python interpreter used for the Finder runtime
+- prompts for the token and stores it in Keychain when `--store-token` is used
 
-After installation, select one or more PDF or image files in Finder and choose `Quick Actions > 转为 Markdown (OCR)`. Conversion runs in the background, immediately confirms that the task started, writes Markdown beside each source file, preserves chunk cache for PDF resume, and sends completion notifications. Failed conversions show a foreground error with a `查看日志` button. Logs and task status JSON are written under `~/Library/Logs/pdf-to-md/`.
+After installation, select one or more PDF or supported image files in Finder and choose `Quick Actions > 转为 Markdown (OCR)`. Conversion runs in the background, immediately confirms that the task started, writes Markdown beside each source file, preserves chunk cache for PDF resume, and sends completion notifications. Failed conversions show a foreground error with a `查看日志` button. Logs and task status JSON are written under `~/Library/Logs/pdf-to-md/`.
 
 The first time after installation, open `Quick Actions > Customize...` and enable `转为 Markdown (OCR)` in Finder extensions. Re-run the installer only if the Python environment, configuration, or skill implementation changes.
 
 ## Common Commands
 
 ```bash
-# Local PDF -> same-name Markdown file + saved JSON
+# Local PDF -> Markdown file beside the source, e.g. file.pdf.md
 python scripts/pdf_to_md.py "/path/file.pdf" --pretty
 
-# Local image -> same-name Markdown file + saved JSON
+# Local image -> Markdown file beside the source, e.g. file.png.md
 python scripts/pdf_to_md.py "/path/file.png" --pretty
 
 # Local PDF -> custom Markdown output path
@@ -92,6 +91,13 @@ python scripts/vl_caller.py --file-path "/path/file.png" --file-type 1 --pretty
 
 # Re-run without cache
 python scripts/pdf_to_md.py "/path/file.pdf" --no-cache --pretty
+
+# Keep raw provider JSON explicitly for debugging
+python scripts/pdf_to_md.py "/path/file.pdf" --keep-raw --pretty
+
+# Inspect or purge generated OCR cache
+python scripts/purge_cache.py
+python scripts/purge_cache.py --all --yes
 
 # Show timing breakdown
 python scripts/pdf_to_md.py "/path/file.pdf" --timing --pretty
@@ -110,17 +116,24 @@ python scripts/pdf_to_md.py "/path/file.pdf" --chunk-pages 25 --chunk-workers 1 
 - Local images use PaddleOCR image parsing and write same-name Markdown by default
 - Local PDFs over 20 pages are automatically split and merged
 - Large local PDFs default to 20-page chunks and one worker for API stability
+- Local source files have a hard 2 GB safety limit; direct single-request uploads also use the configured local-file and request-size limits
 - Increase `--chunk-pages` or `--chunk-workers` only when you know the endpoint can handle the load
 - Failed or empty parses do not overwrite Markdown output
+- Existing outputs are not overwritten unless `--force` is passed
 - Repeat local-file runs can reuse cached results
 - For large PDF OCR failures, rerun with cache enabled and the same `--chunk-pages` first so successful chunks are reused
 - Use `--no-cache` only when cached content is suspected to be wrong or stale
-- Raw JSON output is preserved for debugging
+- Raw JSON output is opt-in with `--output` or `--keep-raw`; normal Markdown conversion does not retain it
+- OCR cache stores resumable text and coverage metadata rather than provider raw JSON
+- Markdown image resources are downloaded into a sibling `.assets` directory and references are rewritten safely
+- Markdown asset downloads are bounded by resource count, total size, and total time
+- re-running the installer preserves supported non-secret tuning settings in the local config
 - `pypdf` text extraction is not a normal conversion path
 - use `pypdf` only after three whole-file OCR attempts fail, and only after explicit user confirmation
 - whole-file attempt means one command run for one source PDF; internally split chunks do not count as separate attempts
 - any `pypdf` output should be labeled as fallback quality because text-layer extraction can damage sentence flow and meaning
 - `optimize_file.py` only applies to image inputs, not PDFs
+- `split_pdf.py` preserves selected page content; the `pypdf` backend also copies basic metadata, while outlines, forms and attachments are not copied
 
 ## Validation
 

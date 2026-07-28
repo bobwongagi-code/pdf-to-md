@@ -20,19 +20,17 @@ When making changes to parsing behavior, caching, large-file handling, or retry 
 
 | Case ID | File Type | Scenario | Expected Behavior | Status |
 |---|---|---|---|---|
-| `small-pdf-basic` | local PDF | small normal PDF under 100 pages | direct parse succeeds without split | baseline defined |
-| `normal-pdf-basic` | local PDF | normal multi-page PDF under 100 pages | direct parse succeeds and returns usable `text` | baseline defined |
-| `large-pdf-auto-split` | local PDF | PDF over 100 pages | auto-split path succeeds or fails with actionable chunk context | baseline defined |
+| `small-pdf-basic` | local PDF | small normal PDF under 20 pages | direct parse succeeds without split | baseline defined |
+| `normal-pdf-basic` | local PDF | normal multi-page PDF under 20 pages | direct parse succeeds and returns usable `text` | baseline defined |
+| `large-pdf-auto-split` | local PDF | PDF over 20 pages | auto-split path succeeds or fails with actionable chunk context | baseline defined |
 | `large-pdf-repeat-cache` | local PDF | rerun same large PDF | repeat run reuses full cache or chunk cache where applicable | baseline defined |
 | `scan-orientation` | local PDF/image | scanned or rotated input | optional preprocessing flags produce isolated cache keys and stable output | baseline defined |
 
 ## Detailed Case: `large-pdf-recovery-sample`
 
-- Input file: `OpenClaw橙皮书-从入门到精通-v1.4.0.pdf`
-- Location used during investigation:
-  `/Users/wangbo5/Documents/AI资料学习/OpenClaw/OpenClaw橙皮书-从入门到精通-v1.4.0.pdf`
-- File size: about `8.9 MB`
-- Page count: `114`
+- Input file: a representative large local PDF
+- Keep the local path out of this document; record it in a private test log when needed.
+- Page count: more than the configured chunk size
 
 ### Why It Matters
 
@@ -51,10 +49,10 @@ Initial default behavior did not fully succeed on the first pass.
 
 Observed failure and recovery path:
 
-1. default split path used `1-100` and `101-114`
-2. an early recovery attempt hit page import failure
-3. after split/parse flow hardening, chunk `1/2` then timed out at the API layer
-4. manual smaller chunks `1-40`, `41-80`, and `81-114` succeeded
+1. the default split path produced multiple page ranges
+2. an early recovery attempt hit a page import failure
+3. one chunk later timed out at the API layer
+4. rerunning with a smaller chunk size succeeded
 5. outputs were merged back into a final Markdown file
 
 ### Expected Ongoing Outcome
@@ -67,9 +65,7 @@ Future changes should preserve at least this recovery quality:
 
 ### Evidence
 
-See the external case write-up:
-
-- `/Users/wangbo5/Documents/New project/docs/paddleocr-case-large-pdf-2026-04-05.md`
+Keep any external case write-up outside the repository if it contains private paths or document names.
 
 ## Notes to Maintainers
 

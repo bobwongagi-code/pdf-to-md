@@ -24,6 +24,7 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 import vl_caller
 
@@ -37,6 +38,16 @@ def build_vl_args(args: argparse.Namespace) -> list[str]:
     ]
     if args.markdown_output:
         vl_args.extend(["--markdown-output", args.markdown_output])
+    if getattr(args, "force", False):
+        vl_args.append("--force")
+    if getattr(args, "allow_insecure_http", False):
+        vl_args.append("--allow-insecure-http")
+    if getattr(args, "no_assets", False):
+        vl_args.append("--no-assets")
+    if getattr(args, "assets_output", None):
+        vl_args.extend(["--assets-output", args.assets_output])
+    if getattr(args, "assets_reference_name", None):
+        vl_args.extend(["--assets-reference-name", args.assets_reference_name])
     if args.file_type is not None:
         vl_args.extend(["--file-type", str(args.file_type)])
     if args.pretty:
@@ -55,12 +66,14 @@ def build_vl_args(args: argparse.Namespace) -> list[str]:
         vl_args.extend(["--chunk-workers", str(args.chunk_workers)])
     if args.output:
         vl_args.extend(["--output", args.output])
+    if getattr(args, "keep_raw", False):
+        vl_args.append("--keep-raw")
     if args.timing:
         vl_args.append("--timing")
     return vl_args
 
 
-def main() -> None:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Convert a local PDF or document image to Markdown with sensible defaults.",
     )
@@ -70,11 +83,37 @@ def main() -> None:
         metavar="FILE",
         help="Optional explicit Markdown output path",
     )
+    parser.add_argument("--force", action="store_true", help="Overwrite existing outputs")
+    parser.add_argument(
+        "--allow-insecure-http",
+        action="store_true",
+        help="Allow HTTP only for loopback development endpoints",
+    )
+    parser.add_argument(
+        "--no-assets",
+        action="store_true",
+        help="Do not download image resources referenced by Markdown",
+    )
+    parser.add_argument(
+        "--assets-output",
+        metavar="DIR",
+        help="Directory for downloaded Markdown image resources",
+    )
+    parser.add_argument(
+        "--assets-reference-name",
+        metavar="NAME",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "--output",
         "-o",
         metavar="FILE",
         help="Optional JSON output path",
+    )
+    parser.add_argument(
+        "--keep-raw",
+        action="store_true",
+        help="Keep raw provider JSON at the default temporary output path",
     )
     parser.add_argument(
         "--file-type",
@@ -111,10 +150,9 @@ def main() -> None:
         help="Concurrent PDF OCR chunks for large local PDFs",
     )
 
-    args = parser.parse_args()
-    sys.argv = build_vl_args(args)
-    vl_caller.main()
+    args = parser.parse_args(argv)
+    return vl_caller.main(build_vl_args(args)[1:])
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

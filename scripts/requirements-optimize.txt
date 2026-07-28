@@ -1,8 +1,8 @@
 # File Optimization Dependencies
 # Install with: pip install -r scripts/requirements-optimize.txt
 
-# Image processing
-Pillow>=10.0.0
+# Image processing; pinned to the version covered by the local image tests
+Pillow==10.4.0
 
 # PDF processing
-pypdfium2>=4.0.0
+pypdfium2==4.30.0

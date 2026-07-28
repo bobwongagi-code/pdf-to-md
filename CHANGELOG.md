@@ -8,6 +8,19 @@ This project follows a simple keep-a-changelog style format.
 
 ### Changed
 
+- fixed Finder runtime interpreter selection and dependency preflight, preserved supported local tuning settings across reinstalls, and removed hardcoded batch chunk overrides
+- bounded Markdown asset count, aggregate size and download time, and restricted reference rewriting to Markdown/HTML image destinations
+- added runtime import-closure validation and an end-to-end CLI composition test
+- hardened output publication with collision checks, atomic writes, stale-output protection and bounded cache pruning
+- validated complete OCR page coverage before accepting or caching a result, including duplicate and empty-page checks
+- added HTTPS endpoint validation, Keychain-safe token input, idempotent retries, Retry-After handling, cancellation and whole-file deadlines
+- materialized Markdown image resources into a sibling `.assets` directory, including Finder batch output staging
+- made Finder status updates observable before expensive hashing and reported refresh failures instead of claiming installation success
+- made raw provider JSON opt-in and documented the normalized chunked result schema
+- added a single runtime version source, Finder runtime manifest hashes and CI metadata verification
+- added request/source size guards, stricter cache coverage validation, ordered page checks and blank-page Markdown markers
+- made Finder runtime, workflow and local config publication rollback-safe as one file-backed install transaction
+- made Markdown asset downloads streamed and deduplicated, and bounded optimizer target sizes
 - default large local PDF OCR chunking now uses smaller 20-page chunks and one worker for API stability
 - added `--chunk-pages` and `--chunk-workers` controls for local PDF OCR chunking
 - Markdown output is no longer written when parsing fails or extracted text is empty

@@ -2,7 +2,7 @@
 
 This document defines the output envelope returned by `vl_caller.py`.
 
-By default, `vl_caller.py` saves the JSON envelope to a unique file under the system temp directory and prints the absolute saved path to `stderr`. Use `--output` when you need a custom destination, or `--stdout` when you want to skip file saving and print JSON directly.
+The normal local Markdown flow does not save provider JSON. Use `--output` or `--keep-raw` when you explicitly need the JSON envelope; use `--stdout` to print it directly.
 
 ## Output Envelope
 
@@ -12,7 +12,18 @@ By default, `vl_caller.py` saves the JSON envelope to a unique file under the sy
 {
   "ok": true,
   "text": "Extracted text from all pages",
-  "result": { ... },  // raw provider response
+  "coverage": {
+    "expected_pages": 1,
+    "returned_pages": 1,
+    "missing_pages": [],
+    "empty_pages": [],
+    "duplicate_pages": [],
+    "page_ids": [],
+    "partial": false,
+    "complete": true
+  },
+  "assets": {},
+  "result": { ... },
   "error": null
 }
 ```
@@ -39,10 +50,9 @@ On error:
 | `CONFIG_ERROR` | API not configured |
 | `API_ERROR` | API call failed (auth, timeout, service error, or invalid response schema) |
 
-## Raw Result Notes
+## Result Notes
 
-The `result` field contains raw provider output.  
-Raw fields may vary by model version and endpoint.
+For a direct request, `result` contains the raw provider output. For an automatically split PDF, `result.type` is `chunked_ocr` and contains one record per source page range plus a normalized `merged` section. Raw provider responses are retained only in explicitly requested JSON output, not in the resumable cache.
 
 ## Raw Result Example
 
@@ -86,11 +96,14 @@ Raw fields may vary by model version and endpoint.
 ## Command Examples
 
 ```bash
-# Parse document from URL (result auto-saves to the system temp directory)
+# Parse document from URL (prints JSON to stdout when --stdout is used)
 python scripts/vl_caller.py --file-url "URL" --pretty
 
-# Parse local file (result auto-saves to the system temp directory)
+# Parse local file and write Markdown beside it
 python scripts/vl_caller.py --file-path "doc.pdf" --pretty
+
+# Keep raw provider JSON explicitly
+python scripts/vl_caller.py --file-path "doc.pdf" --keep-raw --pretty
 
 # Save result to a custom file path
 python scripts/vl_caller.py --file-url "URL" --output "./result.json" --pretty

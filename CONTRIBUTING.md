@@ -9,7 +9,7 @@ The goal of this repository is practical reliability: keep the parsing path stab
 - Prefer simple, maintainable changes
 - Optimize for stability first, then speed
 - Keep APIs and CLI behavior explicit
-- Preserve raw debugging information whenever possible
+- Preserve raw debugging information only when the caller explicitly requests it
 - Avoid heavy abstractions for small improvements
 
 ## Local Setup
@@ -25,6 +25,9 @@ Optional helper dependencies:
 ```bash
 pip install -r scripts/requirements-optimize.txt
 ```
+
+CI uses `scripts/requirements-lock.txt` to pin the complete direct and
+transitive dependency set.
 
 Set the required environment variables:
 
@@ -107,5 +110,14 @@ Small, well-scoped pull requests are preferred.
 - `docs/regression-cases.md` tracks real-world regression benchmarks
 - `references/output_schema.md` documents output structure
 - `scripts/vl_caller.py` is the main entry point
+
+Implementation boundaries:
+
+- cli.py owns CLI orchestration; pipeline.py owns PDF chunking and merge behavior
+- ocr_client.py, config.py, and response_parser.py are the OCR client layers
+- cache_store.py owns resumable cache state; artifacts.py owns Markdown, JSON,
+  and image artifact output
+- Finder runtime changes must update RUNTIME_FILES in
+  scripts/install_quick_action.py
 
 When in doubt, keep the default path boring and reliable.

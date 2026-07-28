@@ -31,7 +31,6 @@ python scripts/pdf_to_md.py "/absolute/path/to/document.pdf" --pretty
 Typical stderr output:
 
 ```text
-Result saved to: /tmp/paddleocr/doc-parsing/results/result_20260406_120000_abc123.json
 Markdown saved to: /absolute/path/to/document.md
 ```
 
@@ -39,7 +38,11 @@ Markdown saved to: /absolute/path/to/document.md
 
 Open `/absolute/path/to/document.md` directly.
 
-If you also want to inspect the raw JSON envelope, read the saved JSON path from stderr and inspect the top-level `text` field.
+Raw provider JSON is not retained by the normal Markdown flow. Use `--keep-raw` or an explicit `--output` path only when you need to inspect the envelope and its top-level `text` field.
+
+```bash
+python scripts/pdf_to_md.py "/absolute/path/to/document.pdf" --output "/tmp/document.json" --pretty
+```
 
 ```python
 import json

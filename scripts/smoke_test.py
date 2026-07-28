@@ -20,7 +20,7 @@ Verifies configuration and API connectivity.
 
 Usage:
     python scripts/smoke_test.py
-    python scripts/smoke_test.py --skip-api-test
+    python scripts/smoke_test.py --live-api-test
 """
 
 import argparse
@@ -56,8 +56,8 @@ Set environment variables:
   export PADDLEOCR_DOC_PARSING_MAX_RETRIES=2  # optional
   export PADDLEOCR_DOC_PARSING_RETRY_BACKOFF=1.5  # optional
 
-On macOS, store the token in Keychain instead of shell config:
-  security add-generic-password -s pdf-to-md.paddleocr -a PADDLEOCR_ACCESS_TOKEN -w your_token_here -U
+On macOS, use the installer prompt to store the token in Keychain:
+  python scripts/install_quick_action.py --store-token
 
 ============================================================
 """
@@ -72,7 +72,12 @@ def main():
     parser.add_argument(
         "--skip-api-test",
         action="store_true",
-        help="Skip API connectivity test, only check configuration",
+        help="Explicitly skip API connectivity test, only check configuration",
+    )
+    parser.add_argument(
+        "--live-api-test",
+        action="store_true",
+        help="Explicitly send one real OCR request to the demo document",
     )
     args = parser.parse_args()
 
@@ -116,7 +121,12 @@ def main():
 
     try:
         api_url, _, api_url_source, token_source = get_config_with_sources()
-        print(f"  + PADDLEOCR_DOC_PARSING_API_URL: {api_url} ({api_url_source})")
+        from lib import get_endpoint_origin
+
+        print(
+            f"  + PADDLEOCR_DOC_PARSING_API_URL: "
+            f"{get_endpoint_origin(api_url)} ({api_url_source})"
+        )
         print(f"  + PADDLEOCR_ACCESS_TOKEN: configured ({token_source})")
         timeout = _get_setting("PADDLEOCR_DOC_PARSING_TIMEOUT") or str(DEFAULT_TIMEOUT)
         retries = _get_setting("PADDLEOCR_DOC_PARSING_MAX_RETRIES") or str(DEFAULT_MAX_RETRIES)
@@ -130,8 +140,8 @@ def main():
         return 1
 
     # Test API connectivity
-    if args.skip_api_test:
-        print("\n[3/3] Skipping API connectivity test (--skip-api-test)")
+    if not args.live_api_test:
+        print("\n[3/3] API connectivity test skipped (use --live-api-test to opt in)")
         print("\n" + "=" * 60)
         print("Configuration Check Complete!")
         print("=" * 60)
@@ -144,7 +154,7 @@ def main():
         args.test_url
         or "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/pp_structure_v3_demo.png"
     )
-    print(f"  Test document: {test_url}")
+    print("  Test document: configured demo document")
 
     from lib import parse_document
 
@@ -162,23 +172,13 @@ def main():
 
     print("  + API call successful!")
 
-    # Show results
-    text = result.get("text", "")
-    if text:
-        preview = text[:200].replace("\n", " ")
-        if len(text) > 200:
-            preview += "..."
-        print(f"\n  Preview: {preview}")
-
     print("\n" + "=" * 60)
     print("Smoke Test PASSED")
     print("=" * 60)
     print("\nNext steps:")
     print('  python scripts/vl_caller.py --file-url "URL"')
     print('  python scripts/vl_caller.py --file-path "doc.pdf"')
-    print(
-        "  Results are auto-saved to the system temp directory; the caller prints the saved path."
-    )
+    print("  JSON is printed by default; use --output or --keep-raw to retain it.")
 
     return 0
 

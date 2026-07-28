@@ -1,7 +1,7 @@
 # PaddleOCR Document Parsing Dependencies
 
-# HTTP client
-httpx>=0.24.0
+# HTTP client; pinned to the version covered by the test suite
+httpx==0.28.1
 
 # Pure-Python PDF processing for automatic chunking of large files
-pypdf>=5.0.0
+pypdf==6.9.2

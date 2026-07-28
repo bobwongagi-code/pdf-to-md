@@ -8,7 +8,7 @@ description: Convert PDFs and document images into Markdown and structured JSON 
 Use this skill when the user wants a PDF or document image converted into Markdown, especially for:
 
 - PDFs with tables, formulas, charts, or multi-column layout
-- local PDFs or document images where a same-name `.md` file should be written beside the source file
+- local PDFs or document images where an extension-preserving `.md` file should be written beside the source file
 - cases where raw structured JSON should also be preserved for debugging
 
 Use `python scripts/pdf_to_md.py` for the normal local-file flow.
@@ -32,10 +32,10 @@ Before first real use:
 python scripts/smoke_test.py --skip-api-test
 ```
 
-On macOS, prefer storing the access token in Keychain instead of shell config:
+On macOS, prefer the installer prompt so the access token is stored in Keychain without appearing in the command arguments:
 
 ```bash
-security add-generic-password -s "pdf-to-md.paddleocr" -a "PADDLEOCR_ACCESS_TOKEN" -w "your-token" -U
+python scripts/install_quick_action.py --store-token
 ```
 
 ## Rules
@@ -49,6 +49,7 @@ security add-generic-password -s "pdf-to-md.paddleocr" -a "PADDLEOCR_ACCESS_TOKE
 7. Count an OCR attempt at the PDF job level: one command run for one source file counts once, even if the script splits that PDF into many chunks internally.
 8. For large PDF OCR retries, keep cache enabled and keep the same `--chunk-pages` first, so successful chunks are reused and only failed chunks are retried.
 9. Do not store live API tokens in tracked files. Prefer `PADDLEOCR_ACCESS_TOKEN` from the environment or macOS Keychain fallback.
+10. Treat provider Markdown image references as untrusted: keep asset count, total size, and total download time within configured limits.
 
 ## Commands
 
@@ -99,18 +100,21 @@ python scripts/pdf_to_md.py "/absolute/path/to/report.pdf" --chunk-pages 20 --ch
 Install macOS Finder Quick Action once:
 
 ```bash
-python scripts/install_quick_action.py --store-env-token
+python scripts/install_quick_action.py --store-token
 ```
 
-After installation, enable `转为 Markdown (OCR)` once in Finder `Quick Actions > Customize...`. Finder can then run selected PDFs or images through `Quick Actions > 转为 Markdown (OCR)` in the background without opening Codex. It confirms task start immediately; conversion failures show a foreground alert with a log shortcut. Logs and task status JSON are written to `~/Library/Logs/pdf-to-md/`.
+After installation, enable `转为 Markdown (OCR)` once in Finder `Quick Actions > Customize...`. Finder can then run selected PDFs or supported images through `Quick Actions > 转为 Markdown (OCR)` in the background without opening Codex. It confirms task start immediately; conversion failures show a foreground alert with a log shortcut. Logs and task status JSON are written to `~/Library/Logs/pdf-to-md/`.
 
 ## Output
 
-- `pdf_to_md.py` writes a same-name `.md` file beside the local PDF or image by default
+- `pdf_to_md.py` writes an extension-preserving `.md` file beside the local PDF or image by default, e.g. `file.pdf.md` or `scan.png.md`
 - `--markdown-output` writes Markdown to a custom path
+- existing outputs are not overwritten unless `--force` is passed
 - failed or empty parses do not overwrite Markdown output
-- JSON results are still saved unless `--stdout` is used on `vl_caller.py`
-- read the top-level `text` field when you need the Markdown content from saved JSON
+- raw JSON is saved only when `--output` or `--keep-raw` is explicitly requested
+- OCR cache stores text, coverage and asset references, but omits provider raw JSON
+- Markdown image resources are downloaded beside the Markdown file into a `.assets` directory
+- read the top-level `text` field when you need Markdown content from explicitly saved JSON
 
 ## Errors
 
@@ -137,6 +141,10 @@ Required environment variables:
 - `PADDLEOCR_ACCESS_TOKEN` or macOS Keychain item `service=pdf-to-md.paddleocr`, `account=PADDLEOCR_ACCESS_TOKEN`
 - optional: `PADDLEOCR_DOC_PARSING_MODEL`, defaults to `PaddleOCR-VL-1.6`
 - optional: `PADDLEOCR_DOC_PARSING_TIMEOUT`
+- optional: `PADDLEOCR_DOC_PARSING_TASK_TIMEOUT` (whole-file deadline, capped at 4 hours)
+- optional: `PADDLEOCR_DOC_PARSING_MAX_RETRIES`, `PADDLEOCR_DOC_PARSING_RETRY_BACKOFF`
+- optional: `PADDLEOCR_DOC_PARSING_MAX_LOCAL_FILE_MB`, `PADDLEOCR_DOC_PARSING_MAX_REQUEST_MB`, `PADDLEOCR_DOC_PARSING_MAX_RESPONSE_MB`
+- optional: `PADDLEOCR_DOC_PARSING_MAX_ASSET_COUNT`, `PADDLEOCR_DOC_PARSING_MAX_ASSET_TOTAL_MB`, `PADDLEOCR_DOC_PARSING_ASSET_TOTAL_TIMEOUT`
 
 Do not paste live credentials into tracked files.
 

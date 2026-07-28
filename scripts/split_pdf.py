@@ -21,8 +21,12 @@ Usage:
 """
 
 import argparse
+import os
 import sys
+import tempfile
 from pathlib import Path
+
+from safe_io import OutputPathError, atomic_replace, reject_collisions
 
 
 def _load_pdf_backend():
@@ -98,39 +102,85 @@ def parse_pages(pages_spec: str, total_pages: int) -> list[int]:
     return selected_pages
 
 
-def split_pdf(input_path: Path, output_path: Path, pages_spec: str):
-    """Create a new PDF containing selected pages from the input PDF."""
-    backend_name, backend = _load_pdf_backend()
+def _temp_pdf_path(output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.",
+        suffix=".tmp.pdf",
+        dir=str(output_path.parent),
+    )
+    os.close(fd)
+    return Path(temp_name)
 
-    if backend_name == "pypdf":
-        with input_path.open("rb") as f:
-            reader = backend.PdfReader(f)
-            total_pages = len(reader.pages)
+
+def _commit_temp_pdf(temp_path: Path, output_path: Path, *, force: bool) -> None:
+    atomic_replace(temp_path, output_path, force=force)
+
+
+def split_pdf(input_path: Path, output_path: Path, pages_spec: str, *, force: bool = False):
+    """Create a page-content PDF; document outlines, forms and attachments are not copied."""
+    if input_path.expanduser().is_symlink() and os.getenv("PADDLEOCR_ALLOW_SYMLINKS", "").lower() not in {
+        "1",
+        "true",
+        "yes",
+    }:
+        raise ValueError("Symbolic-link PDF inputs are disabled by default")
+    input_path = input_path.expanduser().resolve()
+    with input_path.open("rb") as source:
+        if not source.read(5).startswith(b"%PDF-"):
+            raise ValueError("Input does not contain a valid PDF signature")
+    output_path = reject_collisions(
+        output_path,
+        [input_path],
+        force=force,
+        label="PDF output",
+    )
+    backend_name, backend = _load_pdf_backend()
+    temp_path = _temp_pdf_path(output_path)
+
+    try:
+        if backend_name == "pypdf":
+            with input_path.open("rb") as f:
+                reader = backend.PdfReader(f)
+                total_pages = len(reader.pages)
+                page_indices = parse_pages(pages_spec, total_pages)
+
+                writer = backend.PdfWriter()
+                if reader.metadata:
+                    writer.add_metadata(
+                        {
+                            str(key): str(value)
+                            for key, value in reader.metadata.items()
+                            if value is not None
+                        }
+                    )
+                for page_index in page_indices:
+                    writer.add_page(reader.pages[page_index])
+                with temp_path.open("wb") as out_f:
+                    writer.write(out_f)
+                    out_f.flush()
+                    os.fsync(out_f.fileno())
+
+            _commit_temp_pdf(temp_path, output_path, force=force)
+            return total_pages, len(page_indices)
+
+        source_pdf = backend.PdfDocument(str(input_path))
+        try:
+            total_pages = len(source_pdf)
             page_indices = parse_pages(pages_spec, total_pages)
 
-            writer = backend.PdfWriter()
-            for page_index in page_indices:
-                writer.add_page(reader.pages[page_index])
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            with output_path.open("wb") as out_f:
-                writer.write(out_f)
-
-        return total_pages, len(page_indices)
-
-    source_pdf = backend.PdfDocument(str(input_path))
-    try:
-        total_pages = len(source_pdf)
-        page_indices = parse_pages(pages_spec, total_pages)
-
-        output_pdf = backend.PdfDocument.new()
-        try:
-            output_pdf.import_pages(source_pdf, page_indices)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_pdf.save(str(output_path))
+            output_pdf = backend.PdfDocument.new()
+            try:
+                output_pdf.import_pages(source_pdf, page_indices)
+                output_pdf.save(str(temp_path))
+                _commit_temp_pdf(temp_path, output_path, force=force)
+            finally:
+                output_pdf.close()
         finally:
-            output_pdf.close()
-    finally:
-        source_pdf.close()
+            source_pdf.close()
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
     return total_pages, len(page_indices)
 
@@ -144,6 +194,7 @@ def main() -> int:
         required=True,
         help='Page ranges, e.g. "1-5,8,10-12"',
     )
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output PDF")
     args = parser.parse_args()
 
     input_path = Path(args.input_pdf)
@@ -160,8 +211,8 @@ def main() -> int:
         return 1
 
     try:
-        total_pages, kept_pages = split_pdf(input_path, output_path, args.pages)
-    except (ValueError, RuntimeError) as e:
+        total_pages, kept_pages = split_pdf(input_path, output_path, args.pages, force=args.force)
+    except Exception as e:
         print(f"ERROR: {e}")
         return 1
 
